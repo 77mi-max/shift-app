@@ -49,15 +49,13 @@
 }
   .grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
 }
 
 .day-card {
-  background: white;
-  padding: 10px;
-  border-radius: 10px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  min-height: 100px;
+  font-size: 12px;
 }
 </style>
 
@@ -67,8 +65,17 @@
 
 <button onclick="generateShifts()">シフト自動作成（30日）</button>
 
-<div id="shiftList" class="grid"></div>
+<div class="grid" id="calendarHeader">
+  <div>日</div>
+  <div>月</div>
+  <div>火</div>
+  <div>水</div>
+  <div>木</div>
+  <div>金</div>
+  <div>土</div>
+</div>
 
+<div id="shiftList" class="grid"></div>
 <script>
 const staffList = [
   { id: 1, name: "Aさん" },
@@ -83,50 +90,74 @@ function generateShifts() {
   shifts = [];
   const days = 30;
 
+  const start = new Date();
+  start.setDate(1); // ←月初に固定
+
   for (let i = 0; i < days; i++) {
-    const date = new Date();
-    date.setDate(date.getDate() + i);
+    const date = new Date(start);
+    date.setDate(start.getDate() + i);
 
-    const night = staffList[Math.floor(Math.random() * staffList.length)];
-    const day1 = staffList[Math.floor(Math.random() * staffList.length)];
-    const day2 = staffList[Math.floor(Math.random() * staffList.length)];
+    const shuffled = [...staffList].sort(() => Math.random() - 0.5);
 
-    shifts.push({ date, type: "夜勤", staff: night.name });
-    shifts.push({ date, type: "日勤", staff: day1.name });
-    shifts.push({ date, type: "日勤", staff: day2.name });
+    const night = shuffled[0];
+    const day1 = shuffled[1];
+    const day2 = shuffled[2];
+
+shifts.push({ date: date.toISOString(), type: "夜勤", staff: night.name });
+shifts.push({ date: date.toISOString(), type: "日勤", staff: day1.name });
+shifts.push({ date: date.toISOString(), type: "日勤", staff: day2.name });
   }
 
   render();
   saveShifts();
 }
-
-// ✅ renderは1個だけ
 function render() {
   const list = document.getElementById("shiftList");
   list.innerHTML = "";
 
+  if (shifts.length === 0) return;
+
   const grouped = {};
 
   shifts.forEach(s => {
-    const key = new Date(s.date).toLocaleDateString();
+    const key = new Date(s.date).toDateString();
     if (!grouped[key]) grouped[key] = [];
     grouped[key].push(s);
   });
 
-  Object.keys(grouped).forEach(date => {
+  // 基準日（最初のデータ）
+const baseDate = shifts.length > 0 ? new Date(shifts[0].date) : new Date();
+
+const year = baseDate.getFullYear();
+const month = baseDate.getMonth();
+
+const startDate = new Date(year, month, 1);
+const startDay = startDate.getDay();
+const totalDays = new Date(year, month + 1, 0).getDate();
+
+  for (let i = 0; i < startDay; i++) {
+    const empty = document.createElement("div");
+    list.appendChild(empty);
+  }
+  for (let d = 1; d <= totalDays; d++) {
+    const date = new Date(year, month, d);
+    const key = date.toDateString();
+
+    const dayShifts = grouped[key] || [];
+
     const div = document.createElement("div");
     div.className = "day-card";
 
-    let html = `<strong>${date}</strong>`;
+    let html = `<strong>${d}</strong>`;
 
-    grouped[date].forEach(s => {
+    dayShifts.forEach(s => {
       const typeClass = s.type === "夜勤" ? "night" : "day";
       html += `<div class="${typeClass}">${s.type}：${s.staff}</div>`;
     });
 
     div.innerHTML = html;
     list.appendChild(div);
-  });
+  }
 }
 
 // 保存
@@ -150,51 +181,6 @@ function loadShifts() {
 window.onload = () => {
   loadShifts();
 };
-
-function render() {
-  const list = document.getElementById("shiftList");
-  list.innerHTML = "";
-
-  shifts.forEach(s => {
-    const li = document.createElement("li");
-    li.textContent = `${s.date.toLocaleDateString()} / ${s.type} / ${s.staff}`;
-    list.appendChild(li);
-  });
-}
-// 保存
-function saveShifts() {
-  localStorage.setItem("shifts", JSON.stringify(shifts))
-  
-function render() {
-  const list = document.getElementById("shiftList");
-  list.innerHTML = "";
-
-  const grouped = {};
-
-  // 日付ごとにまとめる
-  shifts.forEach(s => {
-    const key = new Date(s.date).toLocaleDateString();
-    if (!grouped[key]) grouped[key] = [];
-    grouped[key].push(s);
-  });
-
-  // 表示
-  Object.keys(grouped).forEach(date => {
-    const div = document.createElement("div");
-    div.className = "day-card";
-
-    let html = `<strong>${date}</strong>`;
-
-    grouped[date].forEach(s => {
-      const typeClass = s.type === "夜勤" ? "night" : "day";
-      html += `<div class="${typeClass}">${s.type}：${s.staff}</div>`;
-    });
-
-    div.innerHTML = html;
-    list.appendChild(div);
-  });
-}
-}
 
 </script>
 
