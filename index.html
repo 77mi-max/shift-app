@@ -125,17 +125,8 @@ shifts.push({ date: date.toISOString(), type: "日勤", staff: day2.name });
   render();
   saveShifts();
 }
-function render() {
-  const list = document.getElementById("shiftList");
-  list.innerHTML = "";
-
-  if (shifts.length === 0) return;
-
-  const today = new Date();
-
-  const grouped = {};
-
-  function editShift(dateKey, type, staff) {
+// 👇 renderの外に出す
+function editShift(dateKey, type, staff) {
   const newName = prompt("スタッフ名を変更", staff);
   if (!newName) return;
 
@@ -152,6 +143,22 @@ function render() {
   saveShifts();
   render();
 }
+
+// 
+function render() {
+  const list = document.getElementById("shiftList");
+  list.innerHTML = "";
+
+  if (shifts.length === 0) return;
+
+  const today = new Date();
+  const grouped = {};
+
+  // 
+}
+  saveShifts();
+  render();
+
   shifts.forEach(s => {
     const key = new Date(s.date).toDateString();
     if (!grouped[key]) grouped[key] = [];
@@ -204,9 +211,12 @@ dayShifts.forEach(s => {
     ${s.type}：${s.staff}
   </div>`;
 });
-  }
+
+div.innerHTML = html;
+list.appendChild(div);
 }
 
+}
 // 保存
 function saveShifts() {
   localStorage.setItem("shifts", JSON.stringify(shifts));
