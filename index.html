@@ -209,6 +209,16 @@ function render() {
   }
 }
   
+function loadShifts() {
+  const data = localStorage.getItem("shifts");
+  if (data) {
+    shifts = JSON.parse(data).map(s => ({
+      ...s,
+      date: new Date(s.date)
+    }));
+  }
+  render();
+}
 
 // ページ読み込み時
 window.onload = () => {
