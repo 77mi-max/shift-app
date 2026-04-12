@@ -45,8 +45,20 @@
   }
 
   .day {s
-    color: #34c759;
+  　color: #34c759;
   }
+  .grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.day-card {
+  background: white;
+  padding: 10px;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
 </style>
 
 <body>
@@ -55,7 +67,7 @@
 
 <button onclick="generateShifts()">シフト自動作成（30日）</button>
 
-<ul id="shiftList"></ul>
+<div id="shiftList" class="grid"></div>
 
 <script>
 const staffList = [
@@ -114,22 +126,33 @@ function loadShifts() {
     }));
     render();
   }
-  function render() {
+  
+function render() {
   const list = document.getElementById("shiftList");
   list.innerHTML = "";
 
+  const grouped = {};
+
+  // 日付ごとにまとめる
   shifts.forEach(s => {
+    const key = new Date(s.date).toLocaleDateString();
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(s);
+  });
+
+  // 表示
+  Object.keys(grouped).forEach(date => {
     const div = document.createElement("div");
-    div.className = "card";
+    div.className = "day-card";
 
-    const typeClass = s.type === "夜勤" ? "night" : "day";
+    let html = `<strong>${date}</strong>`;
 
-    div.innerHTML = `
-      <div>${s.date.toLocaleDateString()}</div>
-      <div class="${typeClass}">${s.type}</div>
-      <div>${s.staff}</div>
-    `;
+    grouped[date].forEach(s => {
+      const typeClass = s.type === "夜勤" ? "night" : "day";
+      html += `<div class="${typeClass}">${s.type}：${s.staff}</div>`;
+    });
 
+    div.innerHTML = html;
     list.appendChild(div);
   });
 }
