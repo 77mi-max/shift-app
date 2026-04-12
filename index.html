@@ -44,9 +44,9 @@
     font-weight: bold;
   }
 
-  .day {s
-  　color: #34c759;
-  }
+.day {
+  color: #34c759;
+}
   .grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -88,7 +88,6 @@ function generateShifts() {
     date.setDate(date.getDate() + i);
 
     const night = staffList[Math.floor(Math.random() * staffList.length)];
-
     const day1 = staffList[Math.floor(Math.random() * staffList.length)];
     const day2 = staffList[Math.floor(Math.random() * staffList.length)];
 
@@ -101,16 +100,35 @@ function generateShifts() {
   saveShifts();
 }
 
+// ✅ renderは1個だけ
 function render() {
   const list = document.getElementById("shiftList");
   list.innerHTML = "";
 
+  const grouped = {};
+
   shifts.forEach(s => {
-    const li = document.createElement("li");
-    li.textContent = `${s.date.toLocaleDateString()} / ${s.type} / ${s.staff}`;
-    list.appendChild(li);
+    const key = new Date(s.date).toLocaleDateString();
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(s);
+  });
+
+  Object.keys(grouped).forEach(date => {
+    const div = document.createElement("div");
+    div.className = "day-card";
+
+    let html = `<strong>${date}</strong>`;
+
+    grouped[date].forEach(s => {
+      const typeClass = s.type === "夜勤" ? "night" : "day";
+      html += `<div class="${typeClass}">${s.type}：${s.staff}</div>`;
+    });
+
+    div.innerHTML = html;
+    list.appendChild(div);
   });
 }
+
 // 保存
 function saveShifts() {
   localStorage.setItem("shifts", JSON.stringify(shifts));
@@ -126,6 +144,26 @@ function loadShifts() {
     }));
     render();
   }
+}
+
+// ページ読み込み時
+window.onload = () => {
+  loadShifts();
+};
+
+function render() {
+  const list = document.getElementById("shiftList");
+  list.innerHTML = "";
+
+  shifts.forEach(s => {
+    const li = document.createElement("li");
+    li.textContent = `${s.date.toLocaleDateString()} / ${s.type} / ${s.staff}`;
+    list.appendChild(li);
+  });
+}
+// 保存
+function saveShifts() {
+  localStorage.setItem("shifts", JSON.stringify(shifts))
   
 function render() {
   const list = document.getElementById("shiftList");
