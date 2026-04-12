@@ -135,6 +135,23 @@ function render() {
 
   const grouped = {};
 
+  function editShift(dateKey, type, staff) {
+  const newName = prompt("スタッフ名を変更", staff);
+  if (!newName) return;
+
+  shifts.forEach(s => {
+    if (
+      new Date(s.date).toDateString() === dateKey &&
+      s.type === type &&
+      s.staff === staff
+    ) {
+      s.staff = newName;
+    }
+  });
+
+  saveShifts();
+  render();
+}
   shifts.forEach(s => {
     const key = new Date(s.date).toDateString();
     if (!grouped[key]) grouped[key] = [];
@@ -181,13 +198,12 @@ if (
 }
 //
 let html = `<strong>${d}</strong>`;
-    dayShifts.forEach(s => {
-      const typeClass = s.type === "夜勤" ? "night" : "day";
-      html += `<div class="${typeClass}">${s.type}：${s.staff}</div>`;
-    });
-
-    div.innerHTML = html;
-    list.appendChild(div);
+dayShifts.forEach(s => {
+  const typeClass = s.type === "夜勤" ? "night" : "day";
+  html += `<div class="${typeClass}" onclick="editShift('${key}', '${s.type}', '${s.staff}')">
+    ${s.type}：${s.staff}
+  </div>`;
+});
   }
 }
 
