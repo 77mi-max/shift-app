@@ -114,6 +114,25 @@ function loadShifts() {
     }));
     render();
   }
+  function render() {
+  const list = document.getElementById("shiftList");
+  list.innerHTML = "";
+
+  shifts.forEach(s => {
+    const div = document.createElement("div");
+    div.className = "card";
+
+    const typeClass = s.type === "夜勤" ? "night" : "day";
+
+    div.innerHTML = `
+      <div>${s.date.toLocaleDateString()}</div>
+      <div class="${typeClass}">${s.type}</div>
+      <div>${s.staff}</div>
+    `;
+
+    list.appendChild(div);
+  });
+}
 }
 
 </script>
