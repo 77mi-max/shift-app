@@ -144,7 +144,6 @@ function editShift(dateKey, type, staff) {
   render();
 }
 
-// 
 function render() {
   const list = document.getElementById("shiftList");
   list.innerHTML = "";
@@ -154,85 +153,62 @@ function render() {
   const today = new Date();
   const grouped = {};
 
-  // 
-}
-  saveShifts();
-  render();
-
   shifts.forEach(s => {
     const key = new Date(s.date).toDateString();
     if (!grouped[key]) grouped[key] = [];
     grouped[key].push(s);
   });
 
-  // 基準日（最初のデータ）
-const baseDate = shifts.length > 0 ? new Date(shifts[0].date) : new Date();
+  const baseDate = new Date(shifts[0].date);
+  const year = baseDate.getFullYear();
+  const month = baseDate.getMonth();
 
-const year = baseDate.getFullYear();
-const month = baseDate.getMonth();
-
-const startDate = new Date(year, month, 1);
-const startDay = startDate.getDay();
-const totalDays = new Date(year, month + 1, 0).getDate();
+  const startDate = new Date(year, month, 1);
+  const startDay = startDate.getDay();
+  const totalDays = new Date(year, month + 1, 0).getDate();
 
   for (let i = 0; i < startDay; i++) {
-    const empty = document.createElement("div");
-    list.appendChild(empty);
+    list.appendChild(document.createElement("div"));
   }
+
   for (let d = 1; d <= totalDays; d++) {
     const date = new Date(year, month, d);
     const key = date.toDateString();
 
-    const filter = document.getElementById("staffFilter").value;
+    const staffFilter = document.getElementById("staffFilter").value;
+    const typeFilter = document.getElementById("typeFilter").value;
 
-const staffFilter = document.getElementById("staffFilter").value;
-const typeFilter = document.getElementById("typeFilter").value;
+    const dayShifts = (grouped[key] || []).filter(s => {
+      const matchStaff = staffFilter === "all" || s.staff === staffFilter;
+      const matchType = typeFilter === "all" || s.type === typeFilter;
+      return matchStaff && matchType;
+    });
 
-const dayShifts = (grouped[key] || []).filter(s => {
-  const matchStaff = staffFilter === "all" || s.staff === staffFilter;
-  const matchType = typeFilter === "all" || s.type === typeFilter;
-  return matchStaff && matchType;
-});
     const div = document.createElement("div");
     div.className = "day-card";
 
-if (
-  date.getFullYear() === today.getFullYear() &&
-  date.getMonth() === today.getMonth() &&
-  date.getDate() === today.getDate()
-) {
-  div.style.background = "#fff3cd";
-}
-//
-let html = `<strong>${d}</strong>`;
-dayShifts.forEach(s => {
-  const typeClass = s.type === "夜勤" ? "night" : "day";
-  html += `<div class="${typeClass}" onclick="editShift('${key}', '${s.type}', '${s.staff}')">
-    ${s.type}：${s.staff}
-  </div>`;
-});
+    if (
+      date.getFullYear() === today.getFullYear() &&
+      date.getMonth() === today.getMonth() &&
+      date.getDate() === today.getDate()
+    ) {
+      div.style.background = "#fff3cd";
+    }
 
-div.innerHTML = html;
-list.appendChild(div);
-}
+    let html = `<strong>${d}</strong>`;
 
-}
-// 保存
-function saveShifts() {
-  localStorage.setItem("shifts", JSON.stringify(shifts));
-}
+    dayShifts.forEach(s => {
+      const typeClass = s.type === "夜勤" ? "night" : "day";
+      html += `<div class="${typeClass}" onclick="editShift('${key}', '${s.type}', '${s.staff}')">
+        ${s.type}：${s.staff}
+      </div>`;
+    });
 
-// 読み込み
-function loadShifts() {
-  const data = localStorage.getItem("shifts");
-  if (data) {
-    shifts = JSON.parse(data).map(s => ({
-      ...s,
-      date: new Date(s.date)
-    }));
-    render();
+    div.innerHTML = html;
+    list.appendChild(div);
   }
 }
+  
 
 // ページ読み込み時
 window.onload = () => {
