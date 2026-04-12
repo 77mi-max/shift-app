@@ -64,7 +64,13 @@
 <h1>シフト表</h1>
 
 <button onclick="generateShifts()">シフト自動作成（30日）</button>
-
+<select id="staffFilter" onchange="render()">
+  <option value="all">全員</option>
+  <option value="Aさん">Aさん</option>
+  <option value="Bさん">Bさん</option>
+  <option value="Cさん">Cさん</option>
+  <option value="Dさん">Dさん</option>
+</select>
 <div class="grid" id="calendarHeader">
   <div>日</div>
   <div>月</div>
@@ -143,7 +149,11 @@ const totalDays = new Date(year, month + 1, 0).getDate();
     const date = new Date(year, month, d);
     const key = date.toDateString();
 
-    const dayShifts = grouped[key] || [];
+const filter = document.getElementById("staffFilter").value;
+
+const dayShifts = (grouped[key] || []).filter(s => {
+  return filter === "all" || s.staff === filter;
+});
 
     const div = document.createElement("div");
     div.className = "day-card";
