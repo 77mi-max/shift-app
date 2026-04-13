@@ -13,6 +13,31 @@
   background: #fff3cd;
   border-radius: 6px;
 }
+
+.row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.name-col {
+  width: 80px;
+  font-weight: bold;
+  background: #eee;
+  padding: 6px;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.cell {
+  min-width: 60px;
+  background: white;
+  border-radius: 6px;
+  padding: 4px;
+  text-align: center;
+  font-size: 11px;
+}
+
   body {
     font-family: -apple-system, BlinkMacSystemFont;
     padding: 20px;
@@ -56,11 +81,32 @@
 .day {
   color: #34c759;
 }
+#shiftList {
+  overflow: auto;
+  max-height: 80vh;
+}
 
-.grid {
-  display: flex;
-  overflow-x: auto;
-  gap: 10px;
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.name-col {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #eee;
+}
+
+.header-cell {
+  background: #ddd;
+  font-weight: bold;
+  z-index: 4;
+}
+
+.header .name-col {
+  z-index: 5;
 }
 .day-card {
   min-width: 120px;
@@ -105,16 +151,6 @@
   <option value="夜勤">夜勤だけ</option>
   <option value="日勤">日勤だけ</option>
 </select>
-
-<div class="grid" id="calendarHeader">
-  <div>日</div>
-  <div>月</div>
-  <div>火</div>
-  <div>水</div>
-  <div>木</div>
-  <div>金</div>
-  <div>土</div>
-</div>
 
 <div id="shiftList" class="grid"></div>
 <script>
@@ -178,86 +214,87 @@ function render() {
 
   if (shifts.length === 0) return;
 
-  const today = new Date();
-  const grouped = {};
-
-  shifts.forEach(s => {
-    const key = new Date(s.date).toDateString();
-    if (!grouped[key]) grouped[key] = [];
-    grouped[key].push(s);
-  });
-
   const baseDate = new Date(shifts[0].date);
   const year = baseDate.getFullYear();
   const month = baseDate.getMonth();
-
-  const startDate = new Date(year, month, 1);
-  const startDay = startDate.getDay();
   const totalDays = new Date(year, month + 1, 0).getDate();
 
-  for (let i = 0; i < startDay; i++) {
-    list.appendChild(document.createElement("div"));
-  }
+  const grouped = {};
+shifts.forEach(s => {
+  const key = new Date(s.date).toDateString();
+  if (!grouped[key]) grouped[key] = [];
+  grouped[key].push(s);
+});
 
-  for (let d = 1; d <= totalDays; d++) {
-    const date = new Date(year, month, d);
-    const key = date.toDateString();
+  // ===== 日付ヘッダー追加 =====
+const headerRow = document.createElement("div");
+headerRow.className = "row header";
 
-    const staffFilter = document.getElementById("staffFilter").value;
-    const typeFilter = document.getElementById("typeFilter").value;
+// 左上の空白
+const empty = document.createElement("div");
+empty.className = "name-col header-cell";
+headerRow.appendChild(empty);
 
-    const dayShifts = (grouped[key] || []).filter(s => {
-      const matchStaff = staffFilter === "all" || s.staff === staffFilter;
-      const matchType = typeFilter === "all" || s.type === typeFilter;
-      return matchStaff && matchType;
-    });
+// 日付
+for (let d = 1; d <= totalDays; d++) {
+  const cell = document.createElement("div");
+  cell.className = "cell header-cell";
+  cell.textContent = d;
+  headerRow.appendChild(cell);
+}
 
-    const div = document.createElement("div");
+list.appendChild(headerRow);
+  // フィルター
+  const staffFilter = document.getElementById("staffFilter").value;
+  const typeFilter = document.getElementById("typeFilter").value;
 
-    div.addEventListener("dragover", (e) => e.preventDefault());
+  staffList.forEach(staff => {
+    const row = document.createElement("div");
+    row.className = "row";
 
-    div.addEventListener("drop", (e) => {
-      e.preventDefault();
-      const dataText = e.dataTransfer.getData("text/plain");
-      const data = JSON.parse(dataText);
-      moveShift(data, date);
-    });
+    // 左の名前固定
+    const name = document.createElement("div");
+    name.className = "name-col";
+    name.textContent = staff.name;
+    row.appendChild(name);
 
-    div.className = "day-card";
+    // 横（日付）
+    for (let d = 1; d <= totalDays; d++) {
+      const date = new Date(year, month, d);
+      const key = date.toDateString();
 
-    if (
-      date.toDateString() === today.toDateString()
-    ) {
-      div.classList.add("today");
-    }
+      const cell = document.createElement("div");
+      cell.className = "cell";
 
-    const title = document.createElement("strong");
-    title.textContent = d;
-    div.appendChild(title);
+      const dayShifts = (grouped[key] || []).filter(s => {
+        const matchStaff =
+  (staffFilter === "all" || staff.name === staffFilter) &&
+  s.staff === staff.name;
+  const matchType = typeFilter === "all" || s.type === typeFilter;
+  return matchStaff && matchType;
+});
 
-    dayShifts.forEach(s => {
-      const shiftDiv = document.createElement("div");
+dayShifts.forEach(s => {
+  const text = document.createElement("div");
+  text.className = s.type === "夜勤" ? "night" : "day";
+  text.textContent = s.type;
+  cell.appendChild(text);
+});
 
-      shiftDiv.className = s.type === "夜勤" ? "night" : "day";
-      shiftDiv.textContent = `${s.type}：${s.staff}`;
+      // ドロップ対応（そのまま移動できる）
+      cell.addEventListener("dragover", e => e.preventDefault());
 
-      shiftDiv.onclick = () => editShift(key, s.type, s.staff);
-
-      shiftDiv.setAttribute("draggable", true);
-
-      shiftDiv.addEventListener("dragstart", (e) => {
-        e.dataTransfer.setData("text/plain", JSON.stringify({
-          dateKey: new Date(s.date).toDateString(),
-          type: s.type,
-          staff: s.staff
-        }));
+      cell.addEventListener("drop", e => {
+        e.preventDefault();
+        const data = JSON.parse(e.dataTransfer.getData("text/plain"));
+        moveShift(data, date);
       });
 
-      div.appendChild(shiftDiv);
-    });
+      row.appendChild(cell);
+    }
 
-    list.appendChild(div);
-  }
+    list.appendChild(row);
+  });
 }
 function loadShifts() {
   const data = localStorage.getItem("shifts");
@@ -273,7 +310,7 @@ function saveShifts() {
 function moveShift(data, newDate) {
   shifts = shifts.filter(s => {
 const a = new Date(s.date).toDateString();
-const b = new Date(data.dateKey).toDateString();
+const b = data.dateKey;
   return !(a === b && s.type === data.type && s.staff === data.staff);
 });
 
