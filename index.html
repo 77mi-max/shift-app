@@ -8,12 +8,16 @@
     <meta name="theme-color" content="#007aff">
     
     <title>シフト表</title>
-  </head>
 <style>
+  .today {
+  background: #fff3cd;
+  border-radius: 6px;
+}
   body {
     font-family: -apple-system, BlinkMacSystemFont;
     padding: 20px;
     background: #f5f5f5;
+    margin: 0;
   }
 
   h1 {
@@ -79,7 +83,7 @@
   }
 }
 </style>
-
+</head>
 <body>
 
 <h1>シフト表</h1>
@@ -206,43 +210,80 @@ function render() {
     });
 
     const div = document.createElement("div");
+
+    div.addEventListener("dragover", (e) => e.preventDefault());
+
+    div.addEventListener("drop", (e) => {
+      e.preventDefault();
+      const dataText = e.dataTransfer.getData("text/plain");
+      const data = JSON.parse(dataText);
+      moveShift(data, date);
+    });
+
     div.className = "day-card";
 
     if (
-      date.getFullYear() === today.getFullYear() &&
-      date.getMonth() === today.getMonth() &&
-      date.getDate() === today.getDate()
+      date.toDateString() === today.toDateString()
     ) {
-      div.style.background = "#fff3cd";
+      div.classList.add("today");
     }
 
-    let html = `<strong>${d}</strong>`;
+    const title = document.createElement("strong");
+    title.textContent = d;
+    div.appendChild(title);
 
     dayShifts.forEach(s => {
-      const typeClass = s.type === "夜勤" ? "night" : "day";
-      html += `<div class="${typeClass}" onclick="editShift('${key}', '${s.type}', '${s.staff}')">
-        ${s.type}：${s.staff}
-      </div>`;
+      const shiftDiv = document.createElement("div");
+
+      shiftDiv.className = s.type === "夜勤" ? "night" : "day";
+      shiftDiv.textContent = `${s.type}：${s.staff}`;
+
+      shiftDiv.onclick = () => editShift(key, s.type, s.staff);
+
+      shiftDiv.setAttribute("draggable", true);
+
+      shiftDiv.addEventListener("dragstart", (e) => {
+        e.dataTransfer.setData("text/plain", JSON.stringify({
+          dateKey: new Date(s.date).toDateString(),
+          type: s.type,
+          staff: s.staff
+        }));
+      });
+
+      div.appendChild(shiftDiv);
     });
 
-    div.innerHTML = html;
     list.appendChild(div);
   }
 }
-  
 function loadShifts() {
   const data = localStorage.getItem("shifts");
   if (data) {
-    shifts = JSON.parse(data).map(s => ({
-      ...s,
-      date: new Date(s.date)
-    }));
+    shifts = JSON.parse(data);
   }
   render();
 }
 function saveShifts() {
   localStorage.setItem("shifts", JSON.stringify(shifts));
 }
+
+function moveShift(data, newDate) {
+  shifts = shifts.filter(s => {
+const a = new Date(s.date).toDateString();
+const b = new Date(data.dateKey).toDateString();
+  return !(a === b && s.type === data.type && s.staff === data.staff);
+});
+
+  shifts.push({
+    date: newDate.toISOString(),
+    type: data.type,
+    staff: data.staff
+  });
+
+  saveShifts();
+  render();
+}
+
 // ページ読み込み時
 window.onload = () => {
   loadShifts();
