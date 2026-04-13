@@ -278,6 +278,32 @@ dayShifts.forEach(s => {
   const text = document.createElement("div");
   text.className = s.type === "夜勤" ? "night" : "day";
   text.textContent = s.type;
+
+  // 👇追加（クリックで変更）
+  text.onclick = () => {
+    e.stopPropagation();
+    const newType = prompt("日勤 or 夜勤 or 空白", s.type);
+
+    if (!newType) return;
+
+    // 削除
+    shifts = shifts.filter(x =>
+      !(x.date === s.date && x.staff === s.staff && x.type === s.type)
+    );
+
+    // 空白じゃなければ追加
+    if (newType !== "空白") {
+      shifts.push({
+        date: s.date,
+        staff: s.staff,
+        type: newType
+      });
+    }
+
+    saveShifts();
+    render();
+  };
+
   cell.appendChild(text);
 });
 
@@ -289,7 +315,20 @@ dayShifts.forEach(s => {
         const data = JSON.parse(e.dataTransfer.getData("text/plain"));
         moveShift(data, date);
       });
+      cell.onclick = () => {
+  const newType = prompt("日勤 or 夜勤");
 
+  if (!newType) return;
+
+  shifts.push({
+    date: date.toISOString(),
+    staff: staff.name,
+    type: newType
+  });
+
+  saveShifts();
+  render();
+};
       row.appendChild(cell);
     }
 
