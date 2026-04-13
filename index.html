@@ -280,29 +280,35 @@ dayShifts.forEach(s => {
   text.textContent = s.type;
 
   // 👇追加（クリックで変更）
-  text.onclick = () => {
+  text.onclick = (e) => {
     e.stopPropagation();
     const newType = prompt("日勤 or 夜勤 or 空白", s.type);
 
     if (!newType) return;
 
-    // 削除
-    shifts = shifts.filter(x =>
-      !(x.date === s.date && x.staff === s.staff && x.type === s.type)
-    );
+    // 🔥既存削除
+  const targetIndex = shifts.findIndex(x =>
+    new Date(x.date).toDateString() === new Date(s.date).toDateString() &&
+    x.staff === s.staff &&
+    x.type === s.type
+  );
 
-    // 空白じゃなければ追加
-    if (newType !== "空白") {
-      shifts.push({
-        date: s.date,
-        staff: s.staff,
-        type: newType
-      });
-    }
+  if (targetIndex !== -1) {
+    shifts.splice(targetIndex, 1);
+  }
 
-    saveShifts();
-    render();
-  };
+  // 🔥新しく追加
+  if (newType !== "空白") {
+    shifts.push({
+      date: s.date,
+      staff: s.staff,
+      type: newType
+    });
+  }
+
+  saveShifts();
+  render();
+};
 
   cell.appendChild(text);
 });
