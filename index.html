@@ -166,12 +166,9 @@
 .cell, .header-cell {
   font-size: 12px;
 }
-.sat {
-  background: #e3f2fd; /* 薄い青 */
-}
 
-.sun {
-  background: #ffe5e5; /* 薄い赤 */
+.sat, .sun, .holiday {
+  background: #fff3cd; /* やわらかい黄色 */
 }
 
 .off {
@@ -322,6 +319,16 @@ headerRow.appendChild(empty);
 for (let d = 1; d <= totalDays; d++) {
   const date = new Date(year, month, d);
   const day = date.getDay(); // 0:日曜, 6:土曜
+  const holidays = [
+  "2026-01-01",
+  "2026-01-12"
+]; // ←とりあえず手動（あとで増やせる）
+
+const yyyyMMdd = date.toISOString().split("T")[0];
+
+if (holidays.includes(yyyyMMdd)) {
+  cell.classList.add("holiday");
+}
   const key = date.toDateString();
   const cell = document.createElement("div");
   cell.className = "cell header-cell";
@@ -364,6 +371,11 @@ list.appendChild(headerRow);
     const cell = document.createElement("div");
     cell.className = "cell";
     const day = date.getDay();
+    const yyyyMMdd = date.toISOString().split("T")[0];
+
+if (holidays.includes(yyyyMMdd)) {
+  cell.classList.add("holiday");
+}
 
 if (day === 0) cell.classList.add("sun");
 if (day === 6) cell.classList.add("sat");
