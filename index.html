@@ -175,10 +175,13 @@ let currentEdit = null;
 // ===== シフト自動生成 =====
 function generateShifts() {
   shifts = [];
-  const days = 30;
 
-  const start = new Date();
-  start.setDate(1);
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth();
+
+  const days = new Date(year, month + 1, 0).getDate();
+  const start = new Date(year, month, 1);
 
   for (let i = 0; i < days; i++) {
     const date = new Date(start);
@@ -194,7 +197,6 @@ function generateShifts() {
   saveShifts();
   render();
 }
-
 // ===== セレクター表示 =====
 function openSelector(x, y, shiftData) {
   const selector = document.getElementById("selector");
@@ -244,9 +246,9 @@ function render() {
   if (shifts.length === 0) return;
   const staffFilter = document.getElementById("staffFilter").value;
   const typeFilter = document.getElementById("typeFilter").value;
-  const baseDate = new Date(shifts[0].date);
-  const year = baseDate.getFullYear();
-  const month = baseDate.getMonth();
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth();
   const totalDays = new Date(year, month + 1, 0).getDate();
 
   const grouped = {};
@@ -258,13 +260,15 @@ function render() {
 
   // ===== ヘッダー =====
   const headerRow = document.createElement("div");
-  headerRow.className = "row header";
+headerRow.className = "row header";
 
-  const empty = document.createElement("div");
-  empty.className = "name-col header-cell";
-  headerRow.appendChild(empty);
+// 左上（空白）
+const empty = document.createElement("div");
+empty.className = "name-col header-cell";
+headerRow.appendChild(empty);
 
-  for (let d = 1; d <= totalDays; d++) {
+// 日付部分
+for (let d = 1; d <= totalDays; d++) {
   const date = new Date(year, month, d);
   const key = date.toDateString();
 
@@ -278,86 +282,149 @@ function render() {
     <div style="font-size:10px;">${count}人</div>
   `;
 
-  headerRow.appendChild(cell); // ←これは絶対必要
+  headerRow.appendChild(cell);
 }
 
-  list.appendChild(headerRow);
+// 👇 右端の「合計」
+const totalHeader = document.createElement("div");
+totalHeader.className = "cell header-cell";
+totalHeader.textContent = "合計";
+headerRow.appendChild(totalHeader);
+
+// 表に追加
+list.appendChild(headerRow);
 
   // ===== 本体 =====
   staffList.forEach(staff => {
-    const row = document.createElement("div");
-    row.className = "row";
-    const name = document.createElement("div");
-    name.className = "name-col";
-    const nightCount = shifts.filter(s => s.staff === staff.name && s.type === "夜勤").length;
-    const dayCount = shifts.filter(s => s.staff === staff.name && s.type === "日勤").length;
+  const row = document.createElement("div");
+  row.className = "row";
 
-name.innerHTML = `
-  ${staff.name}<br>
-  <span style="font-size:10px;">
-    日勤:${dayCount} / 夜勤:${nightCount}
-  </span>
-`;  
-    
-    row.appendChild(name);
+  // 👇 名前
+  const name = document.createElement("div");
+  name.className = "name-col";
 
-    for (let d = 1; d <= totalDays; d++) {
-      const date = new Date(year, month, d);
-      const key = date.toDateString();
+  const nightCount = shifts.filter(s => s.staff === staff.name && s.type === "夜勤").length;
+  const dayCount = shifts.filter(s => s.staff === staff.name && s.type === "日勤").length;
 
-      const cell = document.createElement("div");
-      cell.className = "cell";
+  name.innerHTML = `
+    ${staff.name}<br>
+    <span style="font-size:10px;">
+      日:${dayCount} / 夜:${nightCount}
+    </span>
+  `;
 
-      const today = new Date().toDateString();
-if (date.toDateString() === today) {
-  cell.classList.add("today");
-}
+  row.appendChild(name);
 
+  // 👇 日付ループ
+  for (let d = 1; d <= totalDays; d++) {
+    const date = new Date(year, month, d);
+    const key = date.toDateString();
 
-const dayShifts = (grouped[key] || []).filter(s => {
-  const matchStaff =
-    staffFilter === "all" || s.staff === staffFilter;
+    const cell = document.createElement("div");
+    cell.className = "cell";
 
-  const matchType =
-    typeFilter === "all" || s.type === typeFilter;
+    const today = new Date().toDateString();
+    if (date.toDateString() === today) {
+      cell.classList.add("today");
+    }
 
-  return matchStaff && matchType && s.staff === staff.name;
-});
+    const dayShifts = (grouped[key] || []).filter(s => {
+      const matchStaff =
+        staffFilter === "all" || s.staff === staffFilter;
 
-      dayShifts.forEach(s => {
-        const text = document.createElement("div");
-        text.className = s.type === "夜勤" ? "night" : "day";
-        text.textContent = s.type;
+      const matchType =
+        typeFilter === "all" || s.type === typeFilter;
 
-        // 編集クリック
-        text.onclick = (e) => {
-          e.stopPropagation();
-          openSelector(e.pageX, e.pageY, {
-            date: s.date,
-            staff: s.staff,
-            oldType: s.type
-          });
-        };
+      return matchStaff && matchType && s.staff === staff.name;
+    });
 
-        cell.appendChild(text);
-      });
+    dayShifts.forEach(s => {
+      const text = document.createElement("div");
+      text.className = s.type === "夜勤" ? "night" : "day";
+      text.textContent = s.type;
 
-      // 新規追加クリック
-      cell.onclick = (e) => {
+      text.onclick = (e) => {
+        e.stopPropagation();
         openSelector(e.pageX, e.pageY, {
-          date: date.toISOString(),
-          staff: staff.name,
-          oldType: null
+          date: s.date,
+          staff: s.staff,
+          oldType: s.type
         });
       };
 
-      row.appendChild(cell);
-    }
+      cell.appendChild(text);
+    });
 
-    list.appendChild(row);
-  });
+    cell.onclick = (e) => {
+      openSelector(e.pageX, e.pageY, {
+        date: date.toISOString(),
+        staff: staff.name,
+        oldType: null
+      });
+    };
+
+    row.appendChild(cell);
+  }
+
+  // 👇 ここが超重要（ループの外！！）
+  const totalCell = document.createElement("div");
+  totalCell.className = "cell";
+
+  totalCell.innerHTML = `
+    <div>日:${dayCount}</div>
+    <div>夜:${nightCount}</div>
+  `;
+
+  row.appendChild(totalCell);
+
+  list.appendChild(row);
+});
+const totalRow = document.createElement("div");
+totalRow.className = "row";
+
+// 左下「合計」
+const label = document.createElement("div");
+label.className = "name-col";
+label.textContent = "合計";
+totalRow.appendChild(label);
+
+// 日ごとの合計
+for (let d = 1; d <= totalDays; d++) {
+  const date = new Date(year, month, d);
+  const key = date.toDateString();
+
+  const dayShifts = grouped[key] || [];
+
+  const dayCount = dayShifts.filter(s => s.type === "日勤").length;
+  const nightCount = dayShifts.filter(s => s.type === "夜勤").length;
+
+  const cell = document.createElement("div");
+  cell.className = "cell";
+
+  cell.innerHTML = `
+    <div>日:${dayCount}</div>
+    <div>夜:${nightCount}</div>
+  `;
+
+  totalRow.appendChild(cell);
 }
 
+// 右下の総合
+const totalAll = document.createElement("div");
+totalAll.className = "cell";
+
+const totalDay = shifts.filter(s => s.type === "日勤").length;
+const totalNight = shifts.filter(s => s.type === "夜勤").length;
+
+totalAll.innerHTML = `
+  <div>日:${totalDay}</div>
+  <div>夜:${totalNight}</div>
+`;
+
+totalRow.appendChild(totalAll);
+list.appendChild(totalRow);
+}
+  
 // ===== 保存 =====
 function saveShifts() {
   localStorage.setItem("shifts", JSON.stringify(shifts));
