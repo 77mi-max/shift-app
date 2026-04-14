@@ -287,6 +287,8 @@ function render() {
   staffList.forEach(staff => {
     const row = document.createElement("div");
     row.className = "row";
+    const name = document.createElement("div");
+    name.className = "name-col";
     const nightCount = shifts.filter(s => s.staff === staff.name && s.type === "夜勤").length;
     const dayCount = shifts.filter(s => s.staff === staff.name && s.type === "日勤").length;
 
@@ -296,8 +298,6 @@ name.innerHTML = `
     日勤:${dayCount} / 夜勤:${nightCount}
   </span>
 `;  
-    const name = document.createElement("div");
-    name.className = "name-col";
     
     row.appendChild(name);
 
