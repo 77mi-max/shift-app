@@ -138,21 +138,29 @@
 <h1>シフト表</h1>
 
 <button onclick="generateShifts()">シフト自動作成（30日）</button>
-<select id="staffFilter" onchange="render()">
-  <option value="all">全員</option>
-  <option value="Aさん">Aさん</option>
-  <option value="Bさん">Bさん</option>
-  <option value="Cさん">Cさん</option>
-  <option value="Dさん">Dさん</option>
-</select>
+<div style="display:flex; gap:10px; margin-bottom:10px;">
+  <select id="staffFilter" onchange="render()">
+    <option value="all">全員</option>
+    <option value="Aさん">Aさん</option>
+    <option value="Bさん">Bさん</option>
+    <option value="Cさん">Cさん</option>
+    <option value="Dさん">Dさん</option>
+  </select>
 
-<select id="typeFilter" onchange="render()">
-  <option value="all">すべて</option>
-  <option value="夜勤">夜勤だけ</option>
-  <option value="日勤">日勤だけ</option>
-</select>
+  <select id="typeFilter" onchange="render()">
+    <option value="all">すべて</option>
+    <option value="夜勤">夜勤だけ</option>
+    <option value="日勤">日勤だけ</option>
+  </select>
+</div>
 
-<div id="shiftList" class="grid"></div>
+<div id="shiftList"></div>
+
+<div id="selector" style="display:none; position:fixed; background:white; border-radius:10px; padding:10px; box-shadow:0 4px 10px rgba(0,0,0,0.2); z-index:999;">
+  <button onclick="selectShift('日勤')">日勤</button>
+  <button onclick="selectShift('夜勤')">夜勤</button>
+  <button onclick="selectShift('空白')">削除</button>
+</div>
 <script>
 const staffList = [
   { id: 1, name: "Aさん" },
@@ -161,15 +169,16 @@ const staffList = [
   { id: 4, name: "Dさん" },
 ];
 
-
 let shifts = [];
+let currentEdit = null;
 
+// ===== シフト自動生成 =====
 function generateShifts() {
   shifts = [];
   const days = 30;
 
   const start = new Date();
-  start.setDate(1); // ←月初に固定
+  start.setDate(1);
 
   for (let i = 0; i < days; i++) {
     const date = new Date(start);
@@ -177,37 +186,57 @@ function generateShifts() {
 
     const shuffled = [...staffList].sort(() => Math.random() - 0.5);
 
-    const night = shuffled[0];
-    const day1 = shuffled[1];
-    const day2 = shuffled[2];
-
-shifts.push({ date: date.toISOString(), type: "夜勤", staff: night.name });
-shifts.push({ date: date.toISOString(), type: "日勤", staff: day1.name });
-shifts.push({ date: date.toISOString(), type: "日勤", staff: day2.name });
+    shifts.push({ date: date.toISOString(), type: "夜勤", staff: shuffled[0].name });
+    shifts.push({ date: date.toISOString(), type: "日勤", staff: shuffled[1].name });
+    shifts.push({ date: date.toISOString(), type: "日勤", staff: shuffled[2].name });
   }
 
-  render();
-  saveShifts();
-}
-// 👇 renderの外に出す
-function editShift(dateKey, type, staff) {
-  const newName = prompt("スタッフ名を変更", staff);
-  if (!newName) return;
-
-  shifts.forEach(s => {
-    if (
-      new Date(s.date).toDateString() === dateKey &&
-      s.type === type &&
-      s.staff === staff
-    ) {
-      s.staff = newName;
-    }
-  });
-
   saveShifts();
   render();
 }
 
+// ===== セレクター表示 =====
+function openSelector(x, y, shiftData) {
+  const selector = document.getElementById("selector");
+  selector.style.display = "block";
+  selector.style.left = x + "px";
+  selector.style.top = y + "px";
+
+  currentEdit = shiftData;
+}
+
+// ===== シフト選択（追加・編集・削除）=====
+function selectShift(type) {
+  if (!currentEdit) return;
+
+  const { date, staff, oldType } = currentEdit;
+
+  // 🔥 同じ場所の既存データ削除
+  shifts = shifts.filter(x =>
+    !(
+      new Date(x.date).toDateString() === new Date(date).toDateString() &&
+      x.staff === staff &&
+      x.type === oldType
+    )
+  );
+
+  // 🔥 新規追加（空白じゃない場合）
+  if (type !== "空白") {
+    shifts.push({
+      date: date,
+      staff: staff,
+      type: type
+    });
+  }
+
+  document.getElementById("selector").style.display = "none";
+  currentEdit = null;
+
+  saveShifts();
+  render();
+}
+
+// ===== 表示 =====
 function render() {
   const list = document.getElementById("shiftList");
   list.innerHTML = "";
@@ -220,45 +249,39 @@ function render() {
   const totalDays = new Date(year, month + 1, 0).getDate();
 
   const grouped = {};
-shifts.forEach(s => {
-  const key = new Date(s.date).toDateString();
-  if (!grouped[key]) grouped[key] = [];
-  grouped[key].push(s);
-});
+  shifts.forEach(s => {
+    const key = new Date(s.date).toDateString();
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(s);
+  });
 
-  // ===== 日付ヘッダー追加 =====
-const headerRow = document.createElement("div");
-headerRow.className = "row header";
+  // ===== ヘッダー =====
+  const headerRow = document.createElement("div");
+  headerRow.className = "row header";
 
-// 左上の空白
-const empty = document.createElement("div");
-empty.className = "name-col header-cell";
-headerRow.appendChild(empty);
+  const empty = document.createElement("div");
+  empty.className = "name-col header-cell";
+  headerRow.appendChild(empty);
 
-// 日付
-for (let d = 1; d <= totalDays; d++) {
-  const cell = document.createElement("div");
-  cell.className = "cell header-cell";
-  cell.textContent = d;
-  headerRow.appendChild(cell);
-}
+  for (let d = 1; d <= totalDays; d++) {
+    const cell = document.createElement("div");
+    cell.className = "cell header-cell";
+    cell.textContent = d;
+    headerRow.appendChild(cell);
+  }
 
-list.appendChild(headerRow);
-  // フィルター
-  const staffFilter = document.getElementById("staffFilter").value;
-  const typeFilter = document.getElementById("typeFilter").value;
+  list.appendChild(headerRow);
 
+  // ===== 本体 =====
   staffList.forEach(staff => {
     const row = document.createElement("div");
     row.className = "row";
 
-    // 左の名前固定
     const name = document.createElement("div");
     name.className = "name-col";
     name.textContent = staff.name;
     row.appendChild(name);
 
-    // 横（日付）
     for (let d = 1; d <= totalDays; d++) {
       const date = new Date(year, month, d);
       const key = date.toDateString();
@@ -266,119 +289,80 @@ list.appendChild(headerRow);
       const cell = document.createElement("div");
       cell.className = "cell";
 
-      const dayShifts = (grouped[key] || []).filter(s => {
-        const matchStaff =
-  (staffFilter === "all" || staff.name === staffFilter) &&
-  s.staff === staff.name;
-  const matchType = typeFilter === "all" || s.type === typeFilter;
-  return matchStaff && matchType;
+      const today = new Date().toDateString();
+if (date.toDateString() === today) {
+  cell.classList.add("today");
+}
+
+const staffFilter = document.getElementById("staffFilter").value;
+const typeFilter = document.getElementById("typeFilter").value;
+
+const dayShifts = (grouped[key] || []).filter(s => {
+  const matchStaff =
+    staffFilter === "all" || s.staff === staffFilter;
+
+  const matchType =
+    typeFilter === "all" || s.type === typeFilter;
+
+  return matchStaff && matchType && s.staff === staff.name;
 });
 
-dayShifts.forEach(s => {
-  const text = document.createElement("div");
-  text.className = s.type === "夜勤" ? "night" : "day";
-  text.textContent = s.type;
+      dayShifts.forEach(s => {
+        const text = document.createElement("div");
+        text.className = s.type === "夜勤" ? "night" : "day";
+        text.textContent = s.type;
 
-  // 👇追加（クリックで変更）
-  text.onclick = (e) => {
-    e.stopPropagation();
-    const newType = prompt("日勤 or 夜勤 or 空白", s.type);
+        // 編集クリック
+        text.onclick = (e) => {
+          e.stopPropagation();
+          openSelector(e.pageX, e.pageY, {
+            date: s.date,
+            staff: s.staff,
+            oldType: s.type
+          });
+        };
 
-    if (!newType) return;
-
-    // 🔥既存削除
-  const targetIndex = shifts.findIndex(x =>
-    new Date(x.date).toDateString() === new Date(s.date).toDateString() &&
-    x.staff === s.staff &&
-    x.type === s.type
-  );
-
-  if (targetIndex !== -1) {
-    shifts.splice(targetIndex, 1);
-  }
-
-  // 🔥新しく追加
-  if (newType !== "空白") {
-    shifts.push({
-      date: s.date,
-      staff: s.staff,
-      type: newType
-    });
-  }
-
-  saveShifts();
-  render();
-};
-
-  cell.appendChild(text);
-});
-
-      // ドロップ対応（そのまま移動できる）
-      cell.addEventListener("dragover", e => e.preventDefault());
-
-      cell.addEventListener("drop", e => {
-        e.preventDefault();
-        const data = JSON.parse(e.dataTransfer.getData("text/plain"));
-        moveShift(data, date);
+        cell.appendChild(text);
       });
-      cell.onclick = () => {
-  const newType = prompt("日勤 or 夜勤");
 
-  if (!newType) return;
+      // 新規追加クリック
+      cell.onclick = (e) => {
+        openSelector(e.pageX, e.pageY, {
+          date: date.toISOString(),
+          staff: staff.name,
+          oldType: null
+        });
+      };
 
-  shifts.push({
-    date: date.toISOString(),
-    staff: staff.name,
-    type: newType
-  });
-
-  saveShifts();
-  render();
-};
       row.appendChild(cell);
     }
 
     list.appendChild(row);
   });
 }
-function loadShifts() {
-  const data = localStorage.getItem("shifts");
-  if (data) {
-    shifts = JSON.parse(data);
-  }
-  render();
-}
+
+// ===== 保存 =====
 function saveShifts() {
   localStorage.setItem("shifts", JSON.stringify(shifts));
 }
 
-function moveShift(data, newDate) {
-  shifts = shifts.filter(s => {
-const a = new Date(s.date).toDateString();
-const b = data.dateKey;
-  return !(a === b && s.type === data.type && s.staff === data.staff);
-});
-
-  shifts.push({
-    date: newDate.toISOString(),
-    type: data.type,
-    staff: data.staff
-  });
-
-  saveShifts();
+// ===== 読み込み =====
+function loadShifts() {
+  const data = localStorage.getItem("shifts");
+  if (data) shifts = JSON.parse(data);
   render();
 }
 
-// ページ読み込み時
+// ===== 初期化 =====
 window.onload = () => {
   loadShifts();
 };
-
 </script>
 <script>
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js");
   }
   </script>
+
 </body>
 </html>
