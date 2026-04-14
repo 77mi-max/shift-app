@@ -392,7 +392,7 @@ if (day === 6) cell.classList.add("sat");
       text.textContent = s.type;
       if (s.type === "夜勤") cell.style.background = "#cce5ff";
       if (s.type === "休み") cell.style.background = "#ffd6e7";
-
+      if (s.type === "日勤") cell.style.background = "#ffffff";
       text.onclick = (e) => {
         e.stopPropagation();
         openSelector(e.pageX, e.pageY, {
