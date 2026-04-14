@@ -220,6 +220,11 @@ const staffList = [
 let shifts = [];
 let currentEdit = null;
 
+async function getHolidays(year) {
+  const res = await fetch(`https://holidays-jp.github.io/api/v1/${year}/date.json`);
+  return await res.json();
+}
+
 // ===== シフト自動生成 =====
 function generateShifts() {
   shifts = [];
@@ -287,7 +292,7 @@ function selectShift(type) {
 }
 
 // ===== 表示 =====
-function render() {
+async function render() {
   const list = document.getElementById("shiftList");
   list.innerHTML = "";
 
@@ -297,6 +302,7 @@ function render() {
   const today = new Date();
   const year = today.getFullYear();
   const month = today.getMonth();
+  const holidays = await getHolidays(year);
   const totalDays = new Date(year, month + 1, 0).getDate();
 
   const grouped = {};
