@@ -242,7 +242,8 @@ function render() {
   list.innerHTML = "";
 
   if (shifts.length === 0) return;
-
+  const staffFilter = document.getElementById("staffFilter").value;
+  const typeFilter = document.getElementById("typeFilter").value;
   const baseDate = new Date(shifts[0].date);
   const year = baseDate.getFullYear();
   const month = baseDate.getMonth();
@@ -264,11 +265,21 @@ function render() {
   headerRow.appendChild(empty);
 
   for (let d = 1; d <= totalDays; d++) {
-    const cell = document.createElement("div");
-    cell.className = "cell header-cell";
-    cell.textContent = d;
-    headerRow.appendChild(cell);
-  }
+  const date = new Date(year, month, d);
+  const key = date.toDateString();
+
+  const cell = document.createElement("div");
+  cell.className = "cell header-cell";
+
+  const count = (grouped[key] || []).length;
+
+  cell.innerHTML = `
+    <div>${d}</div>
+    <div style="font-size:10px;">${count}人</div>
+  `;
+
+  headerRow.appendChild(cell); // ←これは絶対必要
+}
 
   list.appendChild(headerRow);
 
@@ -276,10 +287,18 @@ function render() {
   staffList.forEach(staff => {
     const row = document.createElement("div");
     row.className = "row";
+    const nightCount = shifts.filter(s => s.staff === staff.name && s.type === "夜勤").length;
+    const dayCount = shifts.filter(s => s.staff === staff.name && s.type === "日勤").length;
 
+name.innerHTML = `
+  ${staff.name}<br>
+  <span style="font-size:10px;">
+    日勤:${dayCount} / 夜勤:${nightCount}
+  </span>
+`;  
     const name = document.createElement("div");
     name.className = "name-col";
-    name.textContent = staff.name;
+    
     row.appendChild(name);
 
     for (let d = 1; d <= totalDays; d++) {
@@ -294,8 +313,6 @@ if (date.toDateString() === today) {
   cell.classList.add("today");
 }
 
-const staffFilter = document.getElementById("staffFilter").value;
-const typeFilter = document.getElementById("typeFilter").value;
 
 const dayShifts = (grouped[key] || []).filter(s => {
   const matchStaff =
