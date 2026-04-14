@@ -30,11 +30,11 @@
 
 .cell {
   min-width: 60px;
-  background: white;
-  padding: 4px;
-  text-align: center;
-  font-size: 11px;
-  border: 1px solid #ccc; /* ←追加 */
+  height: 50px; /* ←追加 */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
 }
   body {
     font-family: -apple-system, BlinkMacSystemFont;
@@ -101,9 +101,10 @@
 }
 
 .header-cell {
-  background: #ddd;
-  font-weight: bold;
-  z-index: 4;
+  height: 50px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .header .name-col {
