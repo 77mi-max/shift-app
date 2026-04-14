@@ -10,21 +10,20 @@
     <title>シフト表</title>
 <style>
   .today {
-  background: #fff3cd;
-  border-radius: 6px;
+  background: #fff3cd !important;
 }
 
 .row {
   display: flex;
-  gap: 0; /* ←これ重要 */
+  margin: 0;
 }
 
 .name-col {
-  width: 80px;
-  font-weight: bold;
+  position: sticky;
+  left: 0;
+  z-index: 2;
   background: #eee;
   padding: 6px;
-  border-radius: 6px;
   text-align: center;
 }
 
@@ -85,19 +84,7 @@
 }
 
 .header {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-}
-
-.name-col {
-  width: 80px;
-  font-weight: bold;
-  background: #eee;
-  padding: 6px;
-  text-align: center;
-  border: 1px solid #ccc; /* ←追加 */
-  box-sizing: border-box; /* ←ここに入れる */
+  display: flex;
 }
 
 .header-cell {
@@ -110,6 +97,27 @@
 .header .name-col {
   z-index: 5;
 }
+.name-col, .cell, .header-cell {
+  width: 60px;
+  min-width: 60px;
+  box-sizing: border-box;
+}
+.cell, .name-col, .header-cell {
+  border: 1px solid #ccc;
+}
+
+.row {
+  margin: -1px 0 0 -1px;
+}
+
+.cell, .header-cell {
+  height: 50px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+
 .day-card {
   min-width: 120px;
   flex-shrink: 0;
@@ -117,6 +125,7 @@
   padding: 10px;
   border-radius: 10px;
 }
+
 @media (max-width: 600px) {
   .grid {
     grid-template-columns: repeat(2, 1fr);
@@ -132,6 +141,23 @@
     width: 100%;
     margin-bottom: 8px;
   }
+}
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: white;
+}
+
+.cell, .header-cell {
+  font-size: 12px;
+}
+.sat {
+  background: #e3f2fd; /* 薄い青 */
+}
+
+.sun {
+  background: #ffe5e5; /* 薄い赤 */
 }
 </style>
 </head>
@@ -272,10 +298,12 @@ headerRow.appendChild(empty);
 // 日付部分
 for (let d = 1; d <= totalDays; d++) {
   const date = new Date(year, month, d);
+  const day = date.getDay(); // 0:日曜, 6:土曜
   const key = date.toDateString();
-
   const cell = document.createElement("div");
   cell.className = "cell header-cell";
+  if (day === 0) cell.classList.add("sun");
+if (day === 6) cell.classList.add("sat");
 
   const count = (grouped[key] || []).length;
 
@@ -301,16 +329,7 @@ list.appendChild(headerRow);
   // 👇 名前
   const name = document.createElement("div");
   name.className = "name-col";
-
-  const nightCount = shifts.filter(s => s.staff === staff.name && s.type === "夜勤").length;
-  const dayCount = shifts.filter(s => s.staff === staff.name && s.type === "日勤").length;
-
-  name.innerHTML = `
-    ${staff.name}<br>
-    <span style="font-size:10px;">
-      日勤:${dayCount} / 夜勤:${nightCount}
-    </span>
-  `;
+  name.textContent = staff.name;
 
   row.appendChild(name);
 
@@ -321,6 +340,10 @@ list.appendChild(headerRow);
 
     const cell = document.createElement("div");
     cell.className = "cell";
+    const day = date.getDay();
+
+if (day === 0) cell.classList.add("sun");
+if (day === 6) cell.classList.add("sat");
 
     const today = new Date().toDateString();
     if (date.toDateString() === today) {
@@ -368,7 +391,8 @@ list.appendChild(headerRow);
   // 👇 ここが超重要（ループの外！！）
   const totalCell = document.createElement("div");
   totalCell.className = "cell";
-
+  const dayCount = shifts.filter(s => s.staff === staff.name && s.type === "日勤").length;
+  const nightCount = shifts.filter(s => s.staff === staff.name && s.type === "夜勤").length;
   totalCell.innerHTML = `
     <div>日勤:${dayCount}</div>
     <div>夜勤:${nightCount}</div>
