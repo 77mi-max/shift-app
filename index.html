@@ -159,6 +159,14 @@
 .sun {
   background: #ffe5e5; /* 薄い赤 */
 }
+
+.off {
+  background: #eee;
+  color: #666;
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
 </style>
 </head>
 <body>
@@ -166,6 +174,7 @@
 <h1>シフト表</h1>
 
 <button onclick="generateShifts()">シフト自動作成（30日）</button>
+<button onclick="selectShift('休み')">休み</button>
 <div style="display:flex; gap:10px; margin-bottom:10px;">
   <select id="staffFilter" onchange="render()">
     <option value="all">全員</option>
@@ -362,7 +371,10 @@ if (day === 6) cell.classList.add("sat");
 
     dayShifts.forEach(s => {
       const text = document.createElement("div");
-      text.className = s.type === "夜勤" ? "night" : "day";
+      text.className =
+  s.type === "夜勤" ? "night" :
+  s.type === "日勤" ? "day" :
+  "off";
       text.textContent = s.type;
 
       text.onclick = (e) => {
@@ -393,10 +405,12 @@ if (day === 6) cell.classList.add("sat");
   totalCell.className = "cell";
   const dayCount = shifts.filter(s => s.staff === staff.name && s.type === "日勤").length;
   const nightCount = shifts.filter(s => s.staff === staff.name && s.type === "夜勤").length;
+  const offCount = shifts.filter(s => s.staff === staff.name && s.type === "休み").length;
   totalCell.innerHTML = `
-    <div>日勤:${dayCount}</div>
-    <div>夜勤:${nightCount}</div>
-  `;
+  <div>日勤:${dayCount}</div>
+  <div>夜勤:${nightCount}</div>
+  <div>休み:${offCount}</div>
+`;
 
   row.appendChild(totalCell);
 
@@ -420,14 +434,15 @@ for (let d = 1; d <= totalDays; d++) {
 
   const dayCount = dayShifts.filter(s => s.type === "日勤").length;
   const nightCount = dayShifts.filter(s => s.type === "夜勤").length;
-
+  const offCount = dayShifts.filter(s => s.type === "休み").length;
   const cell = document.createElement("div");
   cell.className = "cell";
 
   cell.innerHTML = `
-    <div>日勤:${dayCount}</div>
-    <div>夜勤:${nightCount}</div>
-  `;
+  <div>日勤:${dayCount}</div>
+  <div>夜勤:${nightCount}</div>
+  <div>休み:${offCount}</div>
+`;
 
   totalRow.appendChild(cell);
 }
@@ -438,10 +453,11 @@ totalAll.className = "cell";
 
 const totalDay = shifts.filter(s => s.type === "日勤").length;
 const totalNight = shifts.filter(s => s.type === "夜勤").length;
-
+const totalOff = shifts.filter(s => s.type === "休み").length;
 totalAll.innerHTML = `
   <div>日:${totalDay}</div>
   <div>夜:${totalNight}</div>
+  <div>休:${totalOff}</div>
 `;
 
 totalRow.appendChild(totalAll);
