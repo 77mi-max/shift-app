@@ -85,12 +85,6 @@
   padding: 2px 4px;
 }
 
-.off {
-  background: #ffd6e7; /* ピンク */
-  color: #000;
-  border-radius: 4px;
-  padding: 2px 4px;
-}
 
 #shiftList {
   overflow: auto;
@@ -254,6 +248,7 @@ function generateShifts() {
 function openSelector(x, y, shiftData) {
   const selector = document.getElementById("selector");
   selector.style.display = "block";
+  selector.style.position = "fixed";
   selector.style.left = x + "px";
   selector.style.top = y + "px";
 
@@ -297,17 +292,19 @@ async function render() {
   list.innerHTML = "";
 
   if (shifts.length === 0) return;
+  const todayStr = new Date().toDateString(); 
   const staffFilter = document.getElementById("staffFilter").value;
   const typeFilter = document.getElementById("typeFilter").value;
   const today = new Date();
   const year = today.getFullYear();
   const month = today.getMonth();
   const holidays = await getHolidays(year);
+  const holidaySet = new Set(Object.keys(holidays));
   const totalDays = new Date(year, month + 1, 0).getDate();
 
   const grouped = {};
   shifts.forEach(s => {
-    const key = new Date(s.date).toDateString();
+    const key = s.date.split("T")[0];
     if (!grouped[key]) grouped[key] = [];
     grouped[key].push(s);
   });
@@ -324,30 +321,25 @@ headerRow.appendChild(empty);
 // 日付部分
 for (let d = 1; d <= totalDays; d++) {
   const date = new Date(year, month, d);
-  const day = date.getDay(); // 0:日曜, 6:土曜
-  const holidays = [
-  "2026-01-01",
-  "2026-01-12"
-]; // ←とりあえず手動（あとで増やせる）
+  const day = date.getDay();
 
-const yyyyMMdd = date.toISOString().split("T")[0];
-
-if (holidays.includes(yyyyMMdd)) {
-  cell.classList.add("holiday");
-}
-  const key = date.toDateString();
   const cell = document.createElement("div");
   cell.className = "cell header-cell";
-  if (day === 0) cell.classList.add("sun");
-if (day === 6) cell.classList.add("sat");
 
-  const count = (grouped[key] || []).length;
+  // ここが重要（統一フォーマット）
+  const yyyyMMdd = `${year}-${String(month + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
 
-  cell.innerHTML = `<div>${d}</div>`;
-
-  headerRow.appendChild(cell);
+  // 祝日
+    if (holidaySet.has(yyyyMMdd) || day === 0 || day === 6) {
+  cell.style.background = "#fff3cd";
 }
 
+  // 土日
+  if (day === 0) cell.classList.add("sun");
+  if (day === 6) cell.classList.add("sat");
+  cell.innerHTML = `<div>${d}</div>`;
+  headerRow.appendChild(cell);
+}
 // 👇 右端の「合計」
 const totalHeader = document.createElement("div");
 totalHeader.className = "cell header-cell";
@@ -377,20 +369,18 @@ list.appendChild(headerRow);
     const cell = document.createElement("div");
     cell.className = "cell";
     const day = date.getDay();
-    const yyyyMMdd = date.toISOString().split("T")[0];
+    const yyyyMMdd = `${year}-${String(month + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
 
-if (holidays.includes(yyyyMMdd)) {
+    if (holidaySet.has(yyyyMMdd)) {
   cell.classList.add("holiday");
 }
 
 if (day === 0) cell.classList.add("sun");
 if (day === 6) cell.classList.add("sat");
 
-    const today = new Date().toDateString();
-    if (date.toDateString() === today) {
-      cell.classList.add("today");
-    }
-
+if (date.toDateString() === todayStr) {
+  cell.classList.add("today");
+}
     const dayShifts = (grouped[key] || []).filter(s => {
       const matchStaff =
         staffFilter === "all" || s.staff === staffFilter;
