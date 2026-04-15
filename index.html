@@ -3,149 +3,309 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>シフト表（修正版）</title>
+<title>シフト表（完全版）</title>
+
 <style>
-body{font-family:-apple-system,BlinkMacSystemFont;padding:20px;background:#f5f5f5;margin:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont;
+  margin:0;
+  padding:20px;
+  background:#f5f5f5;
+}
+
 h1{margin-bottom:10px}
-button{padding:10px 14px;border:none;border-radius:8px;background:#007aff;color:#fff;font-weight:bold}
-select{padding:8px;border-radius:6px;border:1px solid #ccc;margin-right:5px}
 
-.row{display:flex;margin:0}
-.name-col{position:sticky;left:0;z-index:2;background:#eee;padding:6px;text-align:center;width:60px;min-width:60px;border:1px solid #ccc}
-.cell{min-width:60px;height:50px;display:flex;justify-content:center;align-items:center;border:1px solid #ccc;font-size:12px;flex-direction:column}
-.header-cell{background:#fff;font-weight:bold}
-.header{position:sticky;top:0;z-index:3}
+button{
+  padding:10px 14px;
+  border:none;
+  border-radius:8px;
+  background:#007aff;
+  color:#fff;
+  font-weight:bold;
+  margin-right:5px;
+}
 
-.today{background:#fff3cd !important}
-.sun,.sat,.holiday{background:#fff3cd}
+select{
+  padding:8px;
+  border-radius:6px;
+  border:1px solid #ccc;
+  margin-right:5px;
+}
 
-.day{background:#ffffff;padding:2px 4px;border-radius:4px}
+.row{display:flex}
+
+.name-col{
+  position:sticky;
+  left:0;
+  background:#eee;
+  width:70px;
+  min-width:70px;
+  border:1px solid #ccc;
+  text-align:center;
+  padding:6px;
+  z-index:2;
+}
+
+.cell{
+  min-width:60px;
+  height:50px;
+  border:1px solid #ccc;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  font-size:12px;
+  background:#fff;
+  cursor:pointer;
+}
+
+.header{
+  position:sticky;
+  top:0;
+  z-index:5;
+}
+
+.header-cell{
+  font-weight:bold;
+  background:#fff;
+}
+
+.today{
+  background:#fff3cd !important;
+}
+
 .night{background:#cce5ff;padding:2px 4px;border-radius:4px}
+.day{background:#fff;padding:2px 4px;border-radius:4px}
 .off{background:#ffd6e7;padding:2px 4px;border-radius:4px}
 
-#selector{display:none;position:fixed;background:#fff;padding:10px;border-radius:10px;box-shadow:0 4px 10px rgba(0,0,0,.2)}
+#selector{
+  display:none;
+  position:fixed;
+  background:#fff;
+  padding:10px;
+  border-radius:10px;
+  box-shadow:0 4px 10px rgba(0,0,0,.2);
+  z-index:999;
+}
 </style>
 </head>
-<body>
-<h1>シフト表</h1>
-<button onclick="generateShifts()">自動作成</button>
-<button onclick="selectShift('休み')">休み</button>
 
-<div style="display:flex;gap:10px;margin-bottom:10px">
+<body>
+
+<h1>シフト表（完全版）</h1>
+
+<button onclick="generate()">自動作成</button>
+<button onclick="clearAll()">全削除</button>
+
+<div style="margin:10px 0">
 <select id="staffFilter" onchange="render()">
 <option value="all">全員</option>
-<option>Aさん</option><option>Bさん</option><option>Cさん</option><option>Dさん</option>
+<option>Aさん</option>
+<option>Bさん</option>
+<option>Cさん</option>
+<option>Dさん</option>
 </select>
+
 <select id="typeFilter" onchange="render()">
 <option value="all">すべて</option>
-<option>夜勤</option><option>日勤</option>
+<option>日勤</option>
+<option>夜勤</option>
+<option>休み</option>
 </select>
 </div>
 
 <div id="shiftList"></div>
+
 <div id="selector">
-<button onclick="selectShift('日勤')">日勤</button>
-<button onclick="selectShift('夜勤')">夜勤</button>
-<button onclick="selectShift('空白')">削除</button>
+<button onclick="setShift('日勤')">日勤</button>
+<button onclick="setShift('夜勤')">夜勤</button>
+<button onclick="setShift('休み')">休み</button>
+<button onclick="setShift('削除')">削除</button>
 </div>
 
 <script>
-const staffList=[{name:"Aさん"},{name:"Bさん"},{name:"Cさん"},{name:"Dさん"}];
-let shifts=[];
-let currentEdit=null;
+const staffList=["Aさん","Bさん","Cさん","Dさん"].map(n=>({name:n}));
 
-async function getHolidays(y){
-const r=await fetch(`https://holidays-jp.github.io/api/v1/${y}/date.json`);
-return await r.json();
+let shifts = load();
+let current = null;
+
+// ===== 保存 =====
+function save(){
+  localStorage.setItem("shifts", JSON.stringify(shifts));
 }
 
-function generateShifts(){
-shifts=[];
-const t=new Date();
-const y=t.getFullYear();
-const m=t.getMonth();
-const d=new Date(y,m+1,0).getDate();
-const s=new Date(y,m,1);
-
-for(let i=0;i<d;i++){
-const date=new Date(s);date.setDate(s.getDate()+i);
-const sh=[...staffList].sort(()=>Math.random()-0.5);
-shifts.push({date:date.toISOString(),type:"夜勤",staff:sh[0].name});
-shifts.push({date:date.toISOString(),type:"日勤",staff:sh[1].name});
-shifts.push({date:date.toISOString(),type:"日勤",staff:sh[2].name});
-}
-save();render();
+function load(){
+  try{
+    const d = JSON.parse(localStorage.getItem("shifts"));
+    return Array.isArray(d) ? d : [];
+  }catch(e){
+    return [];
+  }
 }
 
+// ===== 日付統一 =====
+function ymd(d){
+  return d.toISOString().split("T")[0];
+}
+
+// ===== 自動生成 =====
+function generate(){
+  shifts = [];
+
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const days = new Date(y,m+1,0).getDate();
+  const start = new Date(y,m,1);
+
+  for(let i=0;i<days;i++){
+    const d = new Date(start);
+    d.setDate(start.getDate()+i);
+
+    const shuffled = [...staffList].sort(()=>Math.random()-0.5);
+
+    shifts.push({date:ymd(d), staff:shuffled[0].name, type:"夜勤"});
+    shifts.push({date:ymd(d), staff:shuffled[1].name, type:"日勤"});
+    shifts.push({date:ymd(d), staff:shuffled[2].name, type:"日勤"});
+  }
+
+  save();
+  render();
+}
+
+// ===== セレクタ =====
 function openSelector(x,y,data){
-const el=document.getElementById('selector');
-el.style.display='block';el.style.left=x+'px';el.style.top=y+'px';
-currentEdit=data;
+  const el=document.getElementById("selector");
+  el.style.display="block";
+  el.style.left=x+"px";
+  el.style.top=y+"px";
+  current=data;
 }
 
-function selectShift(type){
-if(!currentEdit)return;
-const {date,staff,oldType}=currentEdit;
-shifts=shifts.filter(s=>!(s.date===date&&s.staff===staff&&s.type===oldType));
-if(type!="空白")shifts.push({date,staff,type});
-currentEdit=null;
-document.getElementById('selector').style.display='none';
-save();render();
+// ===== 変更 =====
+function setShift(type){
+  if(!current) return;
+
+  shifts = shifts.filter(s =>
+    !(s.date===current.date &&
+      s.staff===current.staff &&
+      s.type===current.oldType)
+  );
+
+  if(type!=="削除"){
+    shifts.push({
+      date:current.date,
+      staff:current.staff,
+      type
+    });
+  }
+
+  current=null;
+  document.getElementById("selector").style.display="none";
+
+  save();
+  render();
 }
 
-async function render(){
-const list=document.getElementById('shiftList');
-list.innerHTML='';
-const y=new Date().getFullYear();
-const m=new Date().getMonth();
-const holidays=await getHolidays(y);
-const holidaySet=new Set(Object.keys(holidays));
-const days=new Date(y,m+1,0).getDate();
-const grouped={};
-shifts.forEach(s=>{
-const k=s.date.split('T')[0];
-(grouped[k]=grouped[k]||[]).push(s);
-});
-
-const header=document.createElement('div');header.className='row header';
-header.innerHTML='<div class="name-col header-cell"></div>';
-for(let i=1;i<=days;i++){
-const date=new Date(y,m,i);
-const key=`${y}-${String(m+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
-const cell=document.createElement('div');cell.className='cell header-cell';
-if(holidaySet.has(key)||date.getDay()===0||date.getDay()===6)cell.classList.add('holiday');
-cell.textContent=i;
-header.appendChild(cell);
-}
-list.appendChild(header);
-
-staffList.forEach(staff=>{
-const row=document.createElement('div');row.className='row';
-const name=document.createElement('div');name.className='name-col';name.textContent=staff.name;
-row.appendChild(name);
-
-for(let i=1;i<=days;i++){
-const date=new Date(y,m,i);
-const key=date.toDateString();
-const cell=document.createElement('div');cell.className='cell';
-const listShift=(grouped[key]||[]).filter(s=>s.staff===staff.name);
-listShift.forEach(s=>{
-const el=document.createElement('div');
-el.className=s.type==='夜勤'?'night':s.type==='日勤'?'day':'off';
-el.textContent=s.type;
-el.onclick=e=>{e.stopPropagation();openSelector(e.pageX,e.pageY,{date:s.date,staff:s.staff,oldType:s.type});};
-cell.appendChild(el);
-});
-cell.onclick=e=>openSelector(e.pageX,e.pageY,{date:date.toISOString(),staff:staff.name,oldType:null});
-row.appendChild(cell);
-}
-list.appendChild(row);
-});
+// ===== 全削除 =====
+function clearAll(){
+  shifts=[];
+  save();
+  render();
 }
 
-function save(){localStorage.setItem('shifts',JSON.stringify(shifts));}
-function load(){const d=localStorage.getItem('shifts');if(d)shifts=JSON.parse(d);render();}
-window.onload=load;
+// ===== 表示 =====
+function render(){
+  const list=document.getElementById("shiftList");
+  list.innerHTML="";
+
+  const y=new Date().getFullYear();
+  const m=new Date().getMonth();
+  const days=new Date(y,m+1,0).getDate();
+
+  const staffFilter=document.getElementById("staffFilter").value;
+  const typeFilter=document.getElementById("typeFilter").value;
+
+  const grouped={};
+  shifts.forEach(s=>{
+    (grouped[s.date]=grouped[s.date]||[]).push(s);
+  });
+
+  // ===== ヘッダー =====
+  const header=document.createElement("div");
+  header.className="row header";
+
+  header.appendChild(document.createElement("div"));
+
+  for(let i=1;i<=days;i++){
+    const c=document.createElement("div");
+    c.className="cell header-cell";
+    c.textContent=i;
+    header.appendChild(c);
+  }
+
+  list.appendChild(header);
+
+  // ===== 本体 =====
+  staffList.forEach(staff=>{
+    const row=document.createElement("div");
+    row.className="row";
+
+    const name=document.createElement("div");
+    name.className="name-col";
+    name.textContent=staff.name;
+    row.appendChild(name);
+
+    for(let i=1;i<=days;i++){
+      const date=new Date(y,m,i);
+      const key=ymd(date);
+
+      const cell=document.createElement("div");
+      cell.className="cell";
+
+      const items=(grouped[key]||[])
+        .filter(s=>s.staff===staff.name)
+        .filter(s=>staffFilter==="all"||s.staff===staffFilter)
+        .filter(s=>typeFilter==="all"||s.type===typeFilter);
+
+      items.forEach(s=>{
+        const el=document.createElement("div");
+        el.className=
+          s.type==="夜勤"?"night":
+          s.type==="日勤"?"day":"off";
+
+        el.textContent=s.type;
+
+        el.onclick=(e)=>{
+          e.stopPropagation();
+          openSelector(e.pageX,e.pageY,{
+            date:key,
+            staff:staff.name,
+            oldType:s.type
+          });
+        };
+
+        cell.appendChild(el);
+      });
+
+      cell.onclick=(e)=>{
+        openSelector(e.pageX,e.pageY,{
+          date:key,
+          staff:staff.name,
+          oldType:null
+        });
+      };
+
+      row.appendChild(cell);
+    }
+
+    list.appendChild(row);
+  });
+}
+
+// 初期表示
+render();
 </script>
+
 </body>
-</html>
+</html>git init
