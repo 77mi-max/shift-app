@@ -2,305 +2,200 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>シフトAIシステム</title>
+<title>シフトAI</title>
 
 <style>
-body{font-family:-apple-system;padding:10px;background:#f5f7fb}
-.topbar{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
-input,button{padding:6px;border-radius:6px;border:none}
-button{background:#007aff;color:#fff}
-
-#shiftList{overflow-x:auto;background:#fff;border-radius:10px}
-
-.row{display:flex}
-.cell{
-  width:60px;height:60px;
-  border:1px solid #eee;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  flex-direction:column;
-  font-size:13px;
-  cursor:pointer;
-  user-select:none;
-}
-
-.name-col{
-  width:90px;
-  min-width:90px;
-  position:sticky;
-  left:0;
-  background:#fff;
-  font-weight:bold;
-}
-
-.header{position:sticky;top:0;background:#fff;z-index:10}
-
-.早{background:#fff2cc}
-.遅{background:#f3e5ff}
-.夜{background:#cce5ff}
-.休{background:#ffd6e7}
-
-.no-print{}
-@media print{
-  .no-print{display:none!important}
-}
+body { font-family:sans-serif; padding:20px; }
+table { border-collapse: collapse; }
+td,th { border:1px solid #ccc; padding:6px; text-align:center; }
+.weekend { background:#fff9c4; }
+.shift-夜 { background:#1976d2; color:white; }
+.shift-休 { background:#f8bbd0; }
+.total { background:#eee; font-weight:bold; }
+.controls { margin-bottom:10px; }
+li { cursor:grab; }
 </style>
 </head>
 
 <body>
 
-<div class="topbar no-print">
-<input id="password" type="password" placeholder="管理者">
-<button onclick="login()">ログイン</button>
+<h2>シフト表</h2>
 
-<input id="nameInput" placeholder="名前">
-<button onclick="addStaff()">追加</button>
-
-<button onclick="generateAI()">AI自動作成</button>
-<button onclick="undo()">Undo</button>
-<button onclick="save()">保存</button>
+<div class="controls">
+  年：<select id="yearSelect"></select>
+  月：<select id="monthSelect"></select>
+  <button onclick="changeMonth()">変更</button>
 </div>
 
-<div id="summary" class="no-print"></div>
-<div id="shiftList"></div>
+<div class="controls">
+  <input id="newName" placeholder="名前追加">
+  <button onclick="addName()">追加</button>
+</div>
+
+<ul id="nameList"></ul>
+
+<button onclick="generateAI()">AI生成</button>
+
+<table>
+<thead id="thead"></thead>
+<tbody id="tbody"></tbody>
+</table>
 
 <script>
-let isAdmin=false;
-const ADMIN_PASSWORD="1234";
-
-const year=2026,month=3;
-const daysInMonth=new Date(year,month+1,0).getDate();
-
-let names=[];
+let names=["佐藤","山田","田中"];
 let shifts={};
-let requestOff={};
-let history=[];
+let dragIndex=null;
 
-/* ================= 保存 ================= */
+let currentYear=new Date().getFullYear();
+let currentMonth=new Date().getMonth();
+let daysInMonth=getDays(currentYear,currentMonth);
+
+function getKey(){ return `shift_${currentYear}_${currentMonth}`; }
+function getDays(y,m){ return new Date(y,m+1,0).getDate(); }
+
+function init(){
+  for(let y=2026;y<=2035;y++) yearSelect.innerHTML+=`<option value="${y}">${y}</option>`;
+  for(let m=0;m<12;m++) monthSelect.innerHTML+=`<option value="${m}">${m+1}</option>`;
+
+  yearSelect.value=currentYear;
+  monthSelect.value=currentMonth;
+
+  load();
+  initMonthData();
+  render();
+}
+
+function changeMonth(){
+  save();
+  currentYear=parseInt(yearSelect.value);
+  currentMonth=parseInt(monthSelect.value);
+  daysInMonth=getDays(currentYear,currentMonth);
+  load();
+  initMonthData();
+  render();
+}
+
+function initMonthData(){
+  names.forEach(n=>{
+    if(!shifts[n]||shifts[n].length!==daysInMonth){
+      shifts[n]=Array(daysInMonth).fill("");
+    }
+  });
+}
+
 function save(){
-  localStorage.setItem("shiftAI",JSON.stringify({names,shifts,requestOff}));
+  localStorage.setItem(getKey(),JSON.stringify(shifts));
+  localStorage.setItem("names",JSON.stringify(names));
 }
 
 function load(){
-  const d=JSON.parse(localStorage.getItem("shiftAI"));
-  if(d){
-    names=d.names;
-    shifts=d.shifts;
-    requestOff=d.requestOff;
-  }else{
-    names=["佐藤","山田","田中"];
-    names.forEach(n=>shifts[n]=Array(daysInMonth).fill(""));
+  const d=JSON.parse(localStorage.getItem(getKey()));
+  const n=JSON.parse(localStorage.getItem("names"));
+  if(n) names=n;
+  shifts=d||{};
+}
+
+function isHoliday(d){
+  const day=new Date(currentYear,currentMonth,d+1).getDay();
+  return day===0||day===6;
+}
+
+function render(){
+  renderNameList();
+
+  let th="<tr><th></th>";
+  for(let d=0;d<daysInMonth;d++){
+    const cls=isHoliday(d)?"weekend":"";
+    th+=`<th class="${cls}">${d+1}</th>`;
   }
-}
+  th+="</tr>";
+  thead.innerHTML=th;
 
-/* ================= Undo ================= */
-function pushHistory(){
-  history.push(JSON.stringify({names,shifts,requestOff}));
-}
+  let body="";
 
-function undo(){
-  if(!history.length)return;
-  const prev=JSON.parse(history.pop());
-  names=prev.names;
-  shifts=prev.shifts;
-  requestOff=prev.requestOff;
-  render();
-}
-
-/* ================= login ================= */
-function login(){
-  if(password.value===ADMIN_PASSWORD){
-    isAdmin=true;
-    alert("管理者ON");
-  }
-}
-
-/* ================= staff ================= */
-function addStaff(){
-  const n=nameInput.value;
-  if(!n)return;
-
-  pushHistory();
-  names.push(n);
-  shifts[n]=Array(daysInMonth).fill("");
-  render();
-}
-
-/* ================= 制約 ================= */
-function checkConsecutive(name,day){
-  let c=0;
-  for(let i=day;i>=0;i--){
-    if(shifts[name][i] && shifts[name][i]!=="休") c++;
-    else break;
-  }
-  return c>=3;
-}
-
-function isNG(name,day,type){
-  return false; // 拡張用
-}
-
-/* ================= 希望 ================= */
-function applyRequests(){
   names.forEach(n=>{
-    requestOff[n]?.forEach(d=>{
-      shifts[n][d]="休";
-    });
+    body+=`<tr><th>${n}</th>`;
+    for(let d=0;d<daysInMonth;d++){
+      const s=shifts[n][d]||"";
+      let cls=[];
+      if(isHoliday(d)) cls.push("weekend");
+      if(s==="夜") cls.push("shift-夜");
+      if(s==="休") cls.push("shift-休");
+      const display=(s==="明")?"/":s;
+      body+=`<td class="${cls.join(" ")}" onclick="clickCell('${n}',${d})">${display}</td>`;
+    }
+    body+="</tr>";
+  });
+
+  tbody.innerHTML=body;
+  save();
+}
+
+function clickCell(n,d){
+  const order=["","早","遅","夜","休"];
+  let cur=shifts[n][d]||"";
+  let next=order[(order.indexOf(cur)+1)%order.length];
+  shifts[n][d]=next;
+  if(next==="夜"&&d+1<daysInMonth){
+    shifts[n][d+1]="明";
+  }
+  render();
+}
+
+function addName(){
+  const name=newName.value.trim();
+  if(!name) return;
+  names.push(name);
+  shifts[name]=Array(daysInMonth).fill("");
+  newName.value="";
+  render();
+}
+
+function removeName(n){
+  names=names.filter(x=>x!==n);
+  delete shifts[n];
+  render();
+}
+
+// ===== ドラッグ並び替え =====
+function renderNameList(){
+  nameList.innerHTML="";
+  names.forEach((n,i)=>{
+    nameList.innerHTML+=`<li draggable="true" 
+      ondragstart="dragStart(${i})"
+      ondragover="dragOver(event)"
+      ondrop="drop(${i})">
+      ${n}
+      <button onclick="removeName('${n}')">削除</button>
+    </li>`;
   });
 }
 
-/* ================= スコア ================= */
-function countNight(n){
-  return shifts[n].filter(s=>s==="夜").length;
+function dragStart(i){ dragIndex=i; }
+function dragOver(e){ e.preventDefault(); }
+
+function drop(i){
+  const moved=names.splice(dragIndex,1)[0];
+  names.splice(i,0,moved);
+  render();
 }
 
-function scoreAll(){
-  let score=0;
-
-  for(const n of names){
-    for(let d=0;d<daysInMonth;d++){
-      const s=shifts[n][d];
-
-      if(requestOff[n]?.includes(d) && s!=="休") score+=200;
-      if(checkConsecutive(n,d)) score+=80;
-    }
-
-    if(countNight(n)>6) score+=50;
-  }
-
-  return score;
-}
-
-/* ================= AI生成 ================= */
 function generateAI(){
-  if(!isAdmin)return;
-
-  pushHistory();
-
   names.forEach(n=>{
     shifts[n]=Array(daysInMonth).fill("");
   });
-
-  applyRequests();
-
   const types=["早","遅","夜"];
-
-  let best=JSON.parse(JSON.stringify(shifts));
-  let bestScore=999999;
-
-  for(let i=0;i<6000;i++){
-
+  for(let i=0;i<2000;i++){
     const n=names[Math.random()*names.length|0];
     const d=Math.random()*daysInMonth|0;
-
-    const old=shifts[n][d];
-    const t=types[Math.random()*types.length|0];
-
-    shifts[n][d]=t;
-
-    const s=scoreAll();
-
-    if(s<bestScore){
-      bestScore=s;
-      best=JSON.parse(JSON.stringify(shifts));
-    }else{
-      shifts[n][d]=old;
+    if(!shifts[n][d]){
+      shifts[n][d]=types[Math.random()*types.length|0];
     }
   }
-
-  shifts=best;
-  render();
-  alert("AI完了 score:"+bestScore);
-}
-
-/* ================= 編集 ================= */
-function cellClick(name,d){
-  if(!isAdmin)return;
-
-  const types=["","早","遅","夜","休"];
-  const cur=shifts[name][d]||"";
-  const next=types[(types.indexOf(cur)+1)%types.length];
-
-  pushHistory();
-  shifts[name][d]=next;
   render();
 }
 
-/* ================= 長押し削除 ================= */
-function attachLong(cell,name,d){
-  let t;
-
-  cell.onmousedown=()=>{
-    t=setTimeout(()=>{
-      pushHistory();
-      shifts[name][d]="";
-      render();
-    },600);
-  };
-
-  cell.onmouseup=()=>clearTimeout(t);
-  cell.ontouchstart=cell.onmousedown;
-  cell.ontouchend=cell.onmouseup;
-}
-
-/* ================= 表示 ================= */
-function render(){
-  shiftList.innerHTML="";
-  summary.innerHTML="";
-
-  names.forEach(n=>{
-    const div=document.createElement("div");
-    div.textContent=`${n} 夜:${countNight(n)}`;
-    summary.appendChild(div);
-  });
-
-  const header=document.createElement("div");
-  header.className="row";
-
-  header.appendChild(document.createElement("div"));
-
-  for(let d=1;d<=daysInMonth;d++){
-    const c=document.createElement("div");
-    c.className="cell";
-    c.textContent=d;
-    header.appendChild(c);
-  }
-
-  shiftList.appendChild(header);
-
-  names.forEach(n=>{
-    const row=document.createElement("div");
-    row.className="row";
-
-    const nameCell=document.createElement("div");
-    nameCell.className="cell name-col";
-    nameCell.textContent=n;
-    row.appendChild(nameCell);
-
-    for(let d=0;d<daysInMonth;d++){
-      const cell=document.createElement("div");
-      cell.className="cell";
-
-      const s=shifts[n][d];
-      cell.textContent=s;
-
-      if(s) cell.classList.add(s);
-
-      cell.onclick=()=>cellClick(n,d);
-      attachLong(cell,n,d);
-
-      row.appendChild(cell);
-    }
-
-    shiftList.appendChild(row);
-  });
-}
-
-/* ================= init ================= */
-load();
-render();
+init();
 </script>
 
 </body>
