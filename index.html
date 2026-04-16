@@ -2,220 +2,278 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>シフトAI</title>
+<title>シフト最終版</title>
 <style>
-body { font-family: sans-serif; padding:20px; }
+body { font-family:sans-serif; padding:20px; }
 table { border-collapse: collapse; }
-td, th { border:1px solid #ccc; width:40px; height:40px; text-align:center; }
+td,th { border:1px solid #ccc; padding:6px; text-align:center; }
 
-.day { background:#fff; }
-.night { background:#87CEFA; }
-.off { background:#f8c8dc; }
-.after { background:#fff; }
+.name { background:#f5f5f5; }
 
-.red { color:red; }
+.night { background:#cce5ff; }
+.holiday { background:#ffd6e7; }
+.after { color:#999; }
 
-.name { width:90px; }
-input { width:50px; }
+.want { color:red; }
+
 </style>
 </head>
 <body>
 
-<h2>シフトAI</h2>
+<h2>シフト作成</h2>
 
-年 <select id="year"></select>
-月 <select id="month"></select>
-<button onclick="changeMonth()">変更</button>
+年<select id="year"></select>
+月<select id="month"></select>
 
 <br><br>
 
-<input id="nameInput" placeholder="名前">
+<input id="nameInput">
 <button onclick="addName()">追加</button>
+<button onclick="deleteName()">削除</button>
 
 <br><br>
 
-NGペア:
-<input id="ng1" placeholder="A">
-<input id="ng2" placeholder="B">
-<button onclick="addNG()">追加</button>
+NGペア① <input id="ng1a"><input id="ng1b">
+NGペア② <input id="ng2a"><input id="ng2b">
 
 <br><br>
 
-<button onclick="toggleReq()">希望休</button>
-<button onclick="toggleWish()">希望勤務</button>
-<button onclick="autoFill()">自動生成</button>
+<button onclick="toggleWant()">希望休モード</button>
+<button onclick="autoGenerate()">自動生成</button>
 
 <br><br>
 
-<div id="table"></div>
+<div id="tableWrap"></div>
 
 <script>
-let year=2026, month=4;
-let names=[], shifts={}, rules={}, ngPairs=[];
-let reqMode=false, wishMode=false;
-let need={};
+let names = [];
+let roles = {};
+let shifts = {};
+let wants = {};
+let maxWork = {};
+let ngPairs = [];
 
-function init(){
-  for(let y=2026;y<=2030;y++) yearSelect.innerHTML+=`<option>${y}</option>`;
-  for(let m=1;m<=12;m++) monthSelect.innerHTML+=`<option>${m}</option>`;
-  yearSelect.value=year; monthSelect.value=month;
-  render();
+let wantMode = false;
+
+// ===== 年月 =====
+for(let y=2026;y<=2035;y++){
+  year.innerHTML += `<option>${y}</option>`;
+}
+for(let m=1;m<=12;m++){
+  month.innerHTML += `<option>${m}</option>`;
 }
 
-function getDays(){ return new Date(year,month,0).getDate(); }
+// ===== 日数 =====
+function getDays(){
+  return new Date(year.value, month.value, 0).getDate();
+}
 
+// ===== 名前 =====
 function addName(){
-  const n=nameInput.value;
+  const n = nameInput.value;
   if(!n) return;
+
   names.push(n);
+  roles[n]="主任";
+  maxWork[n]=5;
   shifts[n]=Array(getDays()).fill("");
-  rules[n]={max:5};
-  nameInput.value="";
+  wants[n]=Array(getDays()).fill(false);
+
+  save();
   render();
 }
 
-function addNG(){
-  ngPairs.push([ng1.value, ng2.value]);
-  ng1.value=""; ng2.value="";
+function deleteName(){
+  const n = nameInput.value;
+  names = names.filter(x=>x!==n);
+  delete roles[n];
+  delete shifts[n];
+  delete wants[n];
+
+  save();
+  render();
 }
 
-function toggleReq(){ reqMode=!reqMode; wishMode=false; }
-function toggleWish(){ wishMode=!wishMode; reqMode=false; }
+// ===== NG =====
+function getNG(){
+  ngPairs = [
+    [ng1a.value, ng1b.value],
+    [ng2a.value, ng2b.value]
+  ];
+}
 
-function isNG(n1,n2,d,shift){
+function isNG(a,b){
   return ngPairs.some(p =>
-    ((p[0]===n1 && p[1]===n2)||(p[1]===n1 && p[0]===n2)) &&
-    shifts[n2][d]===shift
+    p[0] && ((p[0]==a&&p[1]==b)||(p[0]==b&&p[1]==a))
   );
 }
 
-function autoFill(){
-  const days=getDays();
+// ===== 連勤 =====
+function streak(n,d){
+  let c=0;
+  for(let i=d-1;i>=0;i--){
+    if(shifts[n][i] && shifts[n][i]!=="休" && shifts[n][i]!=="/"){
+      c++;
+    } else break;
+  }
+  return c;
+}
+
+// ===== 自動生成 =====
+function autoGenerate(){
+  getNG();
+  const days = getDays();
+
+  names.forEach(n=>{
+    shifts[n]=Array(days).fill("休");
+  });
 
   for(let d=0; d<days; d++){
 
-    ["日","夜","早","遅"].forEach(type=>{
+    // 夜勤
+    let count=0;
+    let arr=[...names].sort(()=>Math.random()-0.5);
 
-      let needNum = (need[d] && need[d][type]) || 0;
+    for(let n of arr){
+      if(count>=1) break;
 
-      let assigned = names.filter(n=>shifts[n][d]===type).length;
+      if(roles[n]==="師長") continue;
+      if(wants[n][d]) continue;
+      if(streak(n,d)>=maxWork[n]) continue;
+      if(shifts[n][d]!=="休") continue;
 
-      while(assigned < needNum){
+      let ng = names.some(o =>
+        shifts[o][d]==="夜" && isNG(n,o)
+      );
+      if(ng) continue;
 
-        for(let n of names){
+      shifts[n][d]="夜";
+      count++;
 
-          if(shifts[n][d]) continue;
-          if(shifts[n][d+"_wish"]) continue;
+      if(d+1<days) shifts[n][d+1]="/";
+    }
 
-          // NGチェック
-          let ng=false;
-          for(let other of names){
-            if(other!==n && isNG(n,other,d,type)) ng=true;
-          }
-          if(ng) continue;
+    // 日勤
+    count=0;
+    arr=[...names].sort(()=>Math.random()-0.5);
 
-          // 連勤
-          let count=0;
-          for(let i=d-1;i>=0 && shifts[n][i]!=="休";i--) count++;
-          if(count>=rules[n].max) continue;
+    for(let n of arr){
+      if(count>=2) break;
 
-          // 夜勤後
-          if(shifts[n][d-1]==="夜") continue;
+      if(wants[n][d]) continue;
+      if(streak(n,d)>=maxWork[n]) continue;
+      if(shifts[n][d]!=="休") continue;
 
-          shifts[n][d]=type;
-          assigned++;
-          break;
-        }
+      let ng = names.some(o =>
+        shifts[o][d]==="日" && isNG(n,o)
+      );
+      if(ng) continue;
 
-        break;
-      }
-    });
-
-    // 残りは休
-    names.forEach(n=>{
-      if(!shifts[n][d]) shifts[n][d]="休";
-    });
+      shifts[n][d]="日";
+      count++;
+    }
   }
 
+  save();
   render();
 }
 
+// ===== クリック =====
 function clickCell(n,d){
-  if(reqMode){
+  if(shifts[n][d]==="/") return;
+
+  if(wantMode){
+    wants[n][d]=!wants[n][d];
     shifts[n][d]="休";
-    shifts[n][d+"_wish"]=true;
-    render();
-    return;
+  } else {
+    const list=["休","日","夜"];
+    let cur=shifts[n][d];
+    let next=list[(list.indexOf(cur)+1)%list.length];
+
+    shifts[n][d]=next;
+
+    if(next==="夜"){
+      if(d+1<getDays()) shifts[n][d+1]="/";
+    }
   }
 
-  if(wishMode){
-    shifts[n][d]="日";
-    shifts[n][d+"_wish"]=true;
-    render();
-    return;
-  }
-
-  const order=["","日","夜","早","遅","休"];
-  let now=shifts[n][d];
-  let next=order[(order.indexOf(now)+1)%order.length];
-  shifts[n][d]=next;
-  shifts[n][d+"_wish"]=false;
-
-  if(next==="夜" && d+1<getDays()) shifts[n][d+1]="/";
-
+  save();
   render();
 }
 
-function render(){
-  let html="<table>";
+function toggleWant(){
+  wantMode=!wantMode;
+}
 
-  html+="<tr><th>名前</th>";
-  for(let d=1;d<=getDays();d++) html+=`<th>${d}</th>`;
-  html+="</tr>";
+// ===== 合計 =====
+function count(n,type){
+  return shifts[n].filter(v=>v===type).length;
+}
+
+// ===== 描画 =====
+function render(){
+  const days=getDays();
+
+  let html="<table><tr><th>名前</th>";
+
+  for(let d=0;d<days;d++){
+    html+=`<th>${d+1}</th>`;
+  }
+  html+="<th>合計</th></tr>";
 
   names.forEach(n=>{
-    html+=`<tr><td class="name">${n}</td>`;
-    for(let d=0;d<getDays();d++){
-      let v=shifts[n][d];
-      let cls="day";
-      if(v==="夜") cls="night";
-      if(v==="休") cls="off";
+    html+="<tr>";
 
-      html+=`<td class="${cls} ${shifts[n][d+"_wish"]?"red":""}" onclick="clickCell('${n}',${d})">${v||""}</td>`;
+    html+=`<td class="name">
+      ${n}<br>
+      <select onchange="roles['${n}']=this.value;save()">
+        <option ${roles[n]=="師長"?"selected":""}>師長</option>
+        <option ${roles[n]=="主任"?"selected":""}>主任</option>
+      </select>
+      <br>連勤<input type="number" value="${maxWork[n]}"
+      onchange="maxWork['${n}']=this.value;save()">
+    </td>`;
+
+    for(let d=0;d<days;d++){
+      let v=shifts[n][d];
+      let cls="";
+      if(v==="夜") cls="night";
+      if(v==="休") cls="holiday";
+      if(v==="/") cls="after";
+      if(wants[n][d]) cls+=" want";
+
+      html+=`<td class="${cls}" onclick="clickCell('${n}',${d})">${v}</td>`;
     }
+
+    html+=`<td>${count(n,"日")+count(n,"夜")}</td>`;
     html+="</tr>";
   });
 
-  // 必要人数入力
-  html+="<tr><td>必要</td>";
-  for(let d=0;d<getDays();d++){
-    html+=`
-    <td>
-      日<input onchange="setNeed(${d},'日',this.value)"><br>
-      夜<input onchange="setNeed(${d},'夜',this.value)"><br>
-      早<input onchange="setNeed(${d},'早',this.value)"><br>
-      遅<input onchange="setNeed(${d},'遅',this.value)">
-    </td>`;
-  }
-  html+="</tr>";
-
   html+="</table>";
-  table.innerHTML=html;
+
+  tableWrap.innerHTML=html;
 }
 
-function setNeed(d,type,val){
-  if(!need[d]) need[d]={};
-  need[d][type]=parseInt(val)||0;
+// ===== 保存 =====
+function save(){
+  localStorage.setItem("shift",JSON.stringify({
+    names,roles,shifts,wants,maxWork
+  }));
 }
 
-function changeMonth(){
-  year=parseInt(yearSelect.value);
-  month=parseInt(monthSelect.value);
-  names.forEach(n=>shifts[n]=Array(getDays()).fill(""));
-  render();
+function load(){
+  const d=JSON.parse(localStorage.getItem("shift"));
+  if(!d) return;
+
+  names=d.names||[];
+  roles=d.roles||{};
+  shifts=d.shifts||{};
+  wants=d.wants||{};
+  maxWork=d.maxWork||{};
 }
 
-init();
+load();
+render();
 </script>
 
 </body>
