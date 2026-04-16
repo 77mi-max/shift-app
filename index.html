@@ -3,12 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>シフト表</title>
+<title>シフトAIシステム</title>
 
 <style>
-*{box-sizing:border-box}
 body{font-family:-apple-system;padding:10px;background:#f5f7fb}
-
 .topbar{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
 input,button{padding:6px;border-radius:6px;border:none}
 button{background:#007aff;color:#fff}
@@ -19,275 +17,279 @@ button{background:#007aff;color:#fff}
 .cell{
   width:60px;height:60px;
   border:1px solid #eee;
-  display:flex;align-items:center;justify-content:center;
-  flex-direction:column;font-size:13px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-direction:column;
+  font-size:13px;
+  cursor:pointer;
+  user-select:none;
 }
-.name-col{
-  width:90px;min-width:90px;
-  position:sticky;left:0;background:#fff;z-index:10;font-weight:bold
-}
-.header{position:sticky;top:0;background:#fff;z-index:20}
 
-.weekend{background:#fff6dc}
-.夜{background:#cce5ff}
-.休{background:#ffd6e7;color:#c00}
-.明{color:#888}
+.name-col{
+  width:90px;
+  min-width:90px;
+  position:sticky;
+  left:0;
+  background:#fff;
+  font-weight:bold;
+}
+
+.header{position:sticky;top:0;background:#fff;z-index:10}
+
 .早{background:#fff2cc}
 .遅{background:#f3e5ff}
-.request{background:#ffd6e7!important;color:#c00;font-weight:bold}
+.夜{background:#cce5ff}
+.休{background:#ffd6e7}
 
+.no-print{}
 @media print{
-  button,input{display:none}
-  .cell{width:25px;height:25px;font-size:10px}
+  .no-print{display:none!important}
 }
 </style>
 </head>
 
 <body>
 
-<div class="topbar">
+<div class="topbar no-print">
 <input id="password" type="password" placeholder="管理者">
 <button onclick="login()">ログイン</button>
 
 <input id="nameInput" placeholder="名前">
 <button onclick="addStaff()">追加</button>
 
-<label><input type="checkbox" onchange="toggleType('早')">早</label>
-<label><input type="checkbox" onchange="toggleType('遅')">遅</label>
-
-<button onclick="optimize()">最適化</button>
-<button onclick="window.print()">印刷</button>
+<button onclick="generateAI()">AI自動作成</button>
+<button onclick="undo()">Undo</button>
+<button onclick="save()">保存</button>
 </div>
 
-<!-- 人数設定 -->
-<div class="topbar">
-日<input id="need日" type="number" value="2" style="width:50px">
-夜<input id="need夜" type="number" value="1" style="width:50px">
-</div>
-
+<div id="summary" class="no-print"></div>
 <div id="shiftList"></div>
-<div id="shiftButtons"></div>
 
 <script>
 let isAdmin=false;
 const ADMIN_PASSWORD="1234";
 
-let names=["佐藤","山田","田中"];
-let shifts={};
-let requestOff={};
-let selectedCell=null;
-
-let enabledTypes=["日","夜","休"];
-
-const ngPairs=[["佐藤","山田"]];
-
 const year=2026,month=3;
 const daysInMonth=new Date(year,month+1,0).getDate();
 
-/* 初期化 */
-function init(){
-  names.forEach(n=>{
-    if(!shifts[n]) shifts[n]=Array(daysInMonth).fill("");
-  });
+let names=[];
+let shifts={};
+let requestOff={};
+let history=[];
+
+/* ================= 保存 ================= */
+function save(){
+  localStorage.setItem("shiftAI",JSON.stringify({names,shifts,requestOff}));
 }
 
-/* 管理者 */
+function load(){
+  const d=JSON.parse(localStorage.getItem("shiftAI"));
+  if(d){
+    names=d.names;
+    shifts=d.shifts;
+    requestOff=d.requestOff;
+  }else{
+    names=["佐藤","山田","田中"];
+    names.forEach(n=>shifts[n]=Array(daysInMonth).fill(""));
+  }
+}
+
+/* ================= Undo ================= */
+function pushHistory(){
+  history.push(JSON.stringify({names,shifts,requestOff}));
+}
+
+function undo(){
+  if(!history.length)return;
+  const prev=JSON.parse(history.pop());
+  names=prev.names;
+  shifts=prev.shifts;
+  requestOff=prev.requestOff;
+  render();
+}
+
+/* ================= login ================= */
 function login(){
-  if(password.value===ADMIN_PASSWORD){isAdmin=true;alert("ON")}
+  if(password.value===ADMIN_PASSWORD){
+    isAdmin=true;
+    alert("管理者ON");
+  }
 }
 
-/* 勤務切替 */
-function toggleType(t){
-  enabledTypes=enabledTypes.includes(t)?
-  enabledTypes.filter(x=>x!==t):[...enabledTypes,t];
-  renderButtons();
-}
-
-/* スタッフ */
+/* ================= staff ================= */
 function addStaff(){
   const n=nameInput.value;
   if(!n)return;
+
+  pushHistory();
   names.push(n);
   shifts[n]=Array(daysInMonth).fill("");
   render();
 }
 
-/* 表示 */
-function getMark(s){
-  if(s==="夜")return"夜";
-  if(s==="休")return"休";
-  if(s==="明")return"/";
-  return s||"";
-}
-
-/* ペア禁止 */
-function isPairNG(name,day,type){
-  for(const [a,b] of ngPairs){
-    if(name===a||name===b){
-      const other=name===a?b:a;
-      if(shifts[other]?.[day]===type) return true;
-    }
+/* ================= 制約 ================= */
+function checkConsecutive(name,day){
+  let c=0;
+  for(let i=day;i>=0;i--){
+    if(shifts[name][i] && shifts[name][i]!=="休") c++;
+    else break;
   }
-  return false;
+  return c>=3;
 }
 
-/* セット */
-function setShift(type){
-  if(!isAdmin||!selectedCell)return;
-  const{name,day}=selectedCell;
-
-  if(isPairNG(name,day,type)) return alert("NGペア");
-
-  if(type==="夜"&&day<daysInMonth-1){
-    shifts[name][day+1]="明";
-  }
-
-  shifts[name][day]=type;
-  render();
+function isNG(name,day,type){
+  return false; // 拡張用
 }
 
-/* ボタン */
-function renderButtons(){
-  shiftButtons.innerHTML="";
-  enabledTypes.forEach(t=>{
-    const b=document.createElement("button");
-    b.textContent=t;
-    b.onclick=()=>setShift(t);
-    shiftButtons.appendChild(b);
+/* ================= 希望 ================= */
+function applyRequests(){
+  names.forEach(n=>{
+    requestOff[n]?.forEach(d=>{
+      shifts[n][d]="休";
+    });
   });
 }
 
-/* 評価 */
-function evaluate(){
+/* ================= スコア ================= */
+function countNight(n){
+  return shifts[n].filter(s=>s==="夜").length;
+}
+
+function scoreAll(){
   let score=0;
 
-  for(let d=0;d<daysInMonth;d++){
-    let c={日:0,夜:0};
-
-    names.forEach(n=>{
+  for(const n of names){
+    for(let d=0;d<daysInMonth;d++){
       const s=shifts[n][d];
 
-      if(c[s]!==undefined)c[s]++;
+      if(requestOff[n]?.includes(d) && s!=="休") score+=200;
+      if(checkConsecutive(n,d)) score+=80;
+    }
 
-      if(requestOff[n]?.includes(d)&&s!=="休")score+=100;
-
-      if(d>0&&shifts[n][d-1]==="夜"&&s!=="明")score+=100;
-    });
-
-    const need日=+document.getElementById("need日").value;
-    const need夜=+document.getElementById("need夜").value;
-
-    score+=Math.abs(c.日-need日)*50;
-    score+=Math.abs(c.夜-need夜)*50;
+    if(countNight(n)>6) score+=50;
   }
 
   return score;
 }
 
-/* 最適化 */
-function optimize(){
+/* ================= AI生成 ================= */
+function generateAI(){
   if(!isAdmin)return;
 
-  // 初期
+  pushHistory();
+
   names.forEach(n=>{
     shifts[n]=Array(daysInMonth).fill("");
   });
 
-  names.forEach(n=>{
-    requestOff[n]?.forEach(d=>shifts[n][d]="休");
-  });
+  applyRequests();
+
+  const types=["早","遅","夜"];
 
   let best=JSON.parse(JSON.stringify(shifts));
-  let bestScore=evaluate();
+  let bestScore=999999;
 
-  let temp=100;
-
-  for(let i=0;i<4000;i++){
-    let newS=JSON.parse(JSON.stringify(shifts));
+  for(let i=0;i<6000;i++){
 
     const n=names[Math.random()*names.length|0];
     const d=Math.random()*daysInMonth|0;
 
-    const types=enabledTypes;
-    newS[n][d]=types[Math.random()*types.length|0];
+    const old=shifts[n][d];
+    const t=types[Math.random()*types.length|0];
 
-    const old=shifts;
-    shifts=newS;
+    shifts[n][d]=t;
 
-    let s=evaluate();
+    const s=scoreAll();
 
-    if(s<bestScore||Math.random()<Math.exp((bestScore-s)/temp)){
-      best=JSON.parse(JSON.stringify(shifts));
+    if(s<bestScore){
       bestScore=s;
+      best=JSON.parse(JSON.stringify(shifts));
     }else{
-      shifts=old;
+      shifts[n][d]=old;
     }
-
-    temp*=0.995;
   }
 
   shifts=best;
   render();
-  alert("完了 score:"+bestScore);
+  alert("AI完了 score:"+bestScore);
 }
 
-/* 描画 */
+/* ================= 編集 ================= */
+function cellClick(name,d){
+  if(!isAdmin)return;
+
+  const types=["","早","遅","夜","休"];
+  const cur=shifts[name][d]||"";
+  const next=types[(types.indexOf(cur)+1)%types.length];
+
+  pushHistory();
+  shifts[name][d]=next;
+  render();
+}
+
+/* ================= 長押し削除 ================= */
+function attachLong(cell,name,d){
+  let t;
+
+  cell.onmousedown=()=>{
+    t=setTimeout(()=>{
+      pushHistory();
+      shifts[name][d]="";
+      render();
+    },600);
+  };
+
+  cell.onmouseup=()=>clearTimeout(t);
+  cell.ontouchstart=cell.onmousedown;
+  cell.ontouchend=cell.onmouseup;
+}
+
+/* ================= 表示 ================= */
 function render(){
   shiftList.innerHTML="";
+  summary.innerHTML="";
+
+  names.forEach(n=>{
+    const div=document.createElement("div");
+    div.textContent=`${n} 夜:${countNight(n)}`;
+    summary.appendChild(div);
+  });
 
   const header=document.createElement("div");
-  header.className="row header";
+  header.className="row";
 
-  const empty=document.createElement("div");
-  empty.className="cell name-col";
-  header.appendChild(empty);
+  header.appendChild(document.createElement("div"));
 
   for(let d=1;d<=daysInMonth;d++){
-    const cell=document.createElement("div");
-    cell.className="cell";
-
-    const date=new Date(year,month,d);
-    const day=date.getDay();
-
-    if(day===0||day===6)cell.classList.add("weekend");
-
-    cell.innerHTML=`${d}<small>${["日","月","火","水","木","金","土"][day]}</small>`;
-    header.appendChild(cell);
+    const c=document.createElement("div");
+    c.className="cell";
+    c.textContent=d;
+    header.appendChild(c);
   }
 
   shiftList.appendChild(header);
 
-  names.forEach(name=>{
+  names.forEach(n=>{
     const row=document.createElement("div");
     row.className="row";
 
     const nameCell=document.createElement("div");
     nameCell.className="cell name-col";
-    nameCell.textContent=name;
+    nameCell.textContent=n;
     row.appendChild(nameCell);
 
     for(let d=0;d<daysInMonth;d++){
       const cell=document.createElement("div");
       cell.className="cell";
 
-      const shift=shifts[name][d];
-      cell.textContent=getMark(shift);
+      const s=shifts[n][d];
+      cell.textContent=s;
 
-      if(shift)cell.classList.add(shift);
-      if(requestOff[name]?.includes(d))cell.classList.add("request");
+      if(s) cell.classList.add(s);
 
-      cell.onclick=()=>selectedCell={name,day:d};
-
-      cell.ondblclick=()=>{
-        if(!requestOff[name])requestOff[name]=[];
-        if(requestOff[name].includes(d)){
-          requestOff[name]=requestOff[name].filter(x=>x!==d);
-        }else{
-          requestOff[name].push(d);
-          shifts[name][d]="休";
-        }
-        render();
-      };
+      cell.onclick=()=>cellClick(n,d);
+      attachLong(cell,n,d);
 
       row.appendChild(cell);
     }
@@ -296,10 +298,9 @@ function render(){
   });
 }
 
-/* 起動 */
-init();
+/* ================= init ================= */
+load();
 render();
-renderButtons();
 </script>
 
 </body>
