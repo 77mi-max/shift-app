@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>シフトAI 完全版</title>
+<title>シフトAI</title>
 
 <style>
 body { font-family:sans-serif; padding:20px; }
@@ -16,11 +16,7 @@ td,th { border:1px solid #ccc; padding:6px; text-align:center; color:black; }
 
 .request { color:#e91e63; font-weight:bold; }
 
-.nameRow {
-  display:flex;
-  align-items:center;
-  gap:6px;
-}
+.active { background:#4caf50; color:white; }
 </style>
 </head>
 
@@ -37,7 +33,9 @@ td,th { border:1px solid #ccc; padding:6px; text-align:center; color:black; }
 <input id="nameInput" placeholder="名前">
 <button onclick="addName()">追加</button>
 
-<button onclick="toggleReq()">希望休モード</button>
+<br><br>
+
+<button id="reqBtn" onclick="toggleReq()">希望休モード OFF</button>
 <button onclick="autoFill()">自動生成</button>
 
 <table>
@@ -48,13 +46,14 @@ td,th { border:1px solid #ccc; padding:6px; text-align:center; color:black; }
 
 <script>
 let names=["佐藤","山田"];
-let shifts={}, request={}, needs={};
+let shifts={}, request={}, needs={}, needTypes={早:false,遅:false};
 let year=2026, month=0;
 let reqMode=false;
 
 function init(){
   for(let y=2026;y<=2035;y++) yearSelect.innerHTML+=`<option>${y}</option>`;
   for(let m=0;m<12;m++) monthSelect.innerHTML+=`<option value="${m}">${m+1}</option>`;
+  names.forEach(n=>shifts[n]=Array(getDays()).fill(""));
   render();
 }
 
@@ -67,7 +66,9 @@ function isHoliday(d){
 function render(){
   let days=getDays();
 
-  // header
+  reqBtn.textContent = "希望休モード " + (reqMode?"ON":"OFF");
+  reqBtn.className = reqMode?"active":"";
+
   let h="<tr><th>名前</th>";
   for(let d=0;d<days;d++){
     h+=`<th class="${isHoliday(d)?"weekend":""}">${d+1}</th>`;
@@ -75,20 +76,13 @@ function render(){
   h+="<th>合計</th></tr>";
   thead.innerHTML=h;
 
-  // body
   let b="";
   names.forEach(n=>{
     let total=0;
-
-    b+=`<tr><th>
-      <div class="nameRow">
-        ${n}
-        <button onclick="removeName('${n}')">×</button>
-      </div>
-    </th>`;
+    b+=`<tr><th>${n}</th>`;
 
     for(let d=0;d<days;d++){
-      let s=shifts[n]?.[d]||"";
+      let s=shifts[n][d]||"";
       let cls="";
       if(isHoliday(d)) cls+=" weekend";
       if(["早","日","遅","明"].includes(s)) cls+=" day";
@@ -104,36 +98,41 @@ function render(){
 
     b+=`<td>${total}</td></tr>`;
   });
-
   tbody.innerHTML=b;
 
   // footer
   let f="";
 
-  // 合計（先）
+  // 合計
   f+="<tr><th>合計</th>";
   for(let d=0;d<days;d++){
-    let c=names.filter(n=>["早","日","遅","夜"].includes(shifts[n]?.[d])).length;
+    let c=names.filter(n=>["早","日","遅","夜"].includes(shifts[n][d])).length;
     f+=`<td>${c}</td>`;
   }
   f+="<td></td></tr>";
 
-  // 必要（横並び）
+  // 必要人数
   f+="<tr><th>必要</th>";
   for(let d=0;d<days;d++){
-    let n=needs[d]||{早:1,日:1,遅:1,夜:1};
+    let n=needs[d]||{日:1,夜:1};
     f+=`<td>
-      <div style="display:flex; gap:2px; justify-content:center;">
-        <input size=1 value="${n.早}" onchange="setNeed(${d},'早',this.value)">
-        <input size=1 value="${n.日}" onchange="setNeed(${d},'日',this.value)">
-        <input size=1 value="${n.遅}" onchange="setNeed(${d},'遅',this.value)">
-        <input size=1 value="${n.夜}" onchange="setNeed(${d},'夜',this.value)">
-      </div>
+      日<input size=1 value="${n.日||1}" onchange="setNeed(${d},'日',this.value)">
+      夜<input size=1 value="${n.夜||1}" onchange="setNeed(${d},'夜',this.value)">
+      ${needTypes.早 ? `早<input size=1 value="${n.早||0}" onchange="setNeed(${d},'早',this.value)">` : ""}
+      ${needTypes.遅 ? `遅<input size=1 value="${n.遅||0}" onchange="setNeed(${d},'遅',this.value)">` : ""}
+      <br>
+      ${!needTypes.早 ? `<button onclick="addType('早')">＋早</button>` : ""}
+      ${!needTypes.遅 ? `<button onclick="addType('遅')">＋遅</button>` : ""}
     </td>`;
   }
   f+="<td></td></tr>";
 
   tfoot.innerHTML=f;
+}
+
+function addType(t){
+  needTypes[t]=true;
+  render();
 }
 
 function clickCell(n,d){
@@ -166,24 +165,33 @@ function clickCell(n,d){
 
 function autoFill(){
   let days=getDays();
+
   for(let d=0;d<days;d++){
-    let need=needs[d]||{早:1,日:1,遅:1,夜:1};
-    ["夜","早","日","遅"].forEach(type=>{
+    let need=needs[d]||{日:1,夜:1};
+
+    ["夜","日","早","遅"].forEach(type=>{
+      if(!need[type]) return;
+
       while(count(d,type)<need[type]){
-        let cands=names.filter(n=>!shifts[n]?.[d]);
+        let cands=names.filter(n=>!shifts[n][d] && !request[n]?.includes(d));
         if(cands.length===0) break;
         let pick=cands[Math.random()*cands.length|0];
         shifts[pick][d]=type;
+
+        if(type==="夜" && d+1<days){
+          shifts[pick][d+1]="明";
+        }
       }
     });
   }
+
   render();
 }
 
-function count(d,t){ return names.filter(n=>shifts[n]?.[d]===t).length; }
+function count(d,t){ return names.filter(n=>shifts[n][d]===t).length; }
 
 function setNeed(d,t,v){
-  if(!needs[d]) needs[d]={早:1,日:1,遅:1,夜:1};
+  if(!needs[d]) needs[d]={};
   needs[d][t]=parseInt(v);
 }
 
@@ -196,20 +204,20 @@ function addName(){
   render();
 }
 
-function removeName(n){
-  names=names.filter(x=>x!==n);
-  delete shifts[n];
-  delete request[n];
+function toggleReq(){
+  reqMode=!reqMode;
   render();
 }
-
-function toggleReq(){ reqMode=!reqMode; }
 
 function changeMonth(){
   year=parseInt(yearSelect.value);
   month=parseInt(monthSelect.value);
+  names.forEach(n=>shifts[n]=Array(getDays()).fill(""));
   render();
 }
 
 init();
 </script>
+
+</body>
+</html>
