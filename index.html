@@ -16,7 +16,11 @@ td,th { border:1px solid #ccc; padding:6px; text-align:center; color:black; }
 
 .request { color:#e91e63; font-weight:bold; }
 
-.controls { margin-bottom:10px; }
+.nameRow {
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
 </style>
 </head>
 
@@ -24,24 +28,14 @@ td,th { border:1px solid #ccc; padding:6px; text-align:center; color:black; }
 
 <h2>シフトAI</h2>
 
-<div class="controls">
 年<select id="yearSelect"></select>
 月<select id="monthSelect"></select>
 <button onclick="changeMonth()">変更</button>
-</div>
+
+<br><br>
 
 <input id="nameInput" placeholder="名前">
 <button onclick="addName()">追加</button>
-
-<ul id="list"></ul>
-
-<div>
-<h3>NGペア</h3>
-<input id="ng1"><input id="ng2">
-<input id="ng3"><input id="ng4">
-<button onclick="addNG()">追加</button>
-<div id="ngList"></div>
-</div>
 
 <button onclick="toggleReq()">希望休モード</button>
 <button onclick="autoFill()">自動生成</button>
@@ -54,7 +48,7 @@ td,th { border:1px solid #ccc; padding:6px; text-align:center; color:black; }
 
 <script>
 let names=["佐藤","山田"];
-let shifts={}, request={}, rules={}, needs={}, ngPairs=[];
+let shifts={}, request={}, needs={};
 let year=2026, month=0;
 let reqMode=false;
 
@@ -85,7 +79,14 @@ function render(){
   let b="";
   names.forEach(n=>{
     let total=0;
-    b+=`<tr><th>${n}</th>`;
+
+    b+=`<tr><th>
+      <div class="nameRow">
+        ${n}
+        <button onclick="removeName('${n}')">×</button>
+      </div>
+    </th>`;
+
     for(let d=0;d<days;d++){
       let s=shifts[n]?.[d]||"";
       let cls="";
@@ -100,25 +101,35 @@ function render(){
       let disp=s==="明"?"/":s;
       b+=`<td class="${cls}" onclick="clickCell('${n}',${d})">${disp}</td>`;
     }
+
     b+=`<td>${total}</td></tr>`;
   });
+
   tbody.innerHTML=b;
 
-  // footer（必要人数＋合計）
-  let f="<tr><th>必要</th>";
-  for(let d=0;d<days;d++){
-    let n=needs[d]||{早:1,日:1,遅:1,夜:1};
-    f+=`<td>
-    早<input size=1 value="${n.早}" onchange="setNeed(${d},'早',this.value)">
-    日<input size=1 value="${n.日}" onchange="setNeed(${d},'日',this.value)">
-    </td>`;
-  }
-  f+="<td></td></tr>";
+  // footer
+  let f="";
 
+  // 合計（先）
   f+="<tr><th>合計</th>";
   for(let d=0;d<days;d++){
     let c=names.filter(n=>["早","日","遅","夜"].includes(shifts[n]?.[d])).length;
     f+=`<td>${c}</td>`;
+  }
+  f+="<td></td></tr>";
+
+  // 必要（横並び）
+  f+="<tr><th>必要</th>";
+  for(let d=0;d<days;d++){
+    let n=needs[d]||{早:1,日:1,遅:1,夜:1};
+    f+=`<td>
+      <div style="display:flex; gap:2px; justify-content:center;">
+        <input size=1 value="${n.早}" onchange="setNeed(${d},'早',this.value)">
+        <input size=1 value="${n.日}" onchange="setNeed(${d},'日',this.value)">
+        <input size=1 value="${n.遅}" onchange="setNeed(${d},'遅',this.value)">
+        <input size=1 value="${n.夜}" onchange="setNeed(${d},'夜',this.value)">
+      </div>
+    </td>`;
   }
   f+="<td></td></tr>";
 
@@ -155,10 +166,8 @@ function clickCell(n,d){
 
 function autoFill(){
   let days=getDays();
-
   for(let d=0;d<days;d++){
     let need=needs[d]||{早:1,日:1,遅:1,夜:1};
-
     ["夜","早","日","遅"].forEach(type=>{
       while(count(d,type)<need[type]){
         let cands=names.filter(n=>!shifts[n]?.[d]);
@@ -168,7 +177,6 @@ function autoFill(){
       }
     });
   }
-
   render();
 }
 
@@ -188,10 +196,11 @@ function addName(){
   render();
 }
 
-function addNG(){
-  if(ng1.value && ng2.value) ngPairs.push([ng1.value,ng2.value]);
-  if(ng3.value && ng4.value) ngPairs.push([ng3.value,ng4.value]);
-  ng1.value=ng2.value=ng3.value=ng4.value="";
+function removeName(n){
+  names=names.filter(x=>x!==n);
+  delete shifts[n];
+  delete request[n];
+  render();
 }
 
 function toggleReq(){ reqMode=!reqMode; }
@@ -204,6 +213,3 @@ function changeMonth(){
 
 init();
 </script>
-
-</body>
-</html>
