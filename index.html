@@ -9,33 +9,45 @@
 *{box-sizing:border-box;}
 body{font-family:-apple-system;padding:20px;background:#f5f5f5;}
 
-button,select,input{padding:8px;margin:5px;}
+button,select,input{padding:6px;margin:3px;}
 
 .row{display:flex;}
-
-.cell,.header-cell,.name-col{
-  width:75px;height:75px;border:1px solid #ccc;
-  display:flex;align-items:center;justify-content:center;
-  text-align:center;font-size:11px;
-}
-
-.name-col{position:sticky;left:0;background:#fff;}
-.header{position:sticky;top:0;background:#fff;}
 #shiftList{overflow-x:auto;}
 
-.early{background:#fff0cc;}
-.day{background:#fff;}
-.late{background:#e6ccff;}
+:root{
+  --cell-size: calc((100vw - 80px) / 8);
+}
+
+.cell,.header-cell{
+  width:var(--cell-size);
+  aspect-ratio:1/1;
+  border:1px solid #ccc;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:16px;
+  font-weight:bold;
+  color:#000;
+  background:#fff;
+}
+
+.name-col{
+  width:80px;
+  min-width:80px;
+  aspect-ratio:1/1;
+  position:sticky;
+  left:0;
+  background:#fff;
+}
+
 .night{background:#cce5ff;}
-.off{background:#ffd6e7;}
-.ake{background:#e0ffe0;}
-.weekend{background:#fff3cd;}
+.weekend{background:#fff3cd !important;}
+.request{background:#ffd6e7 !important;color:#ff4d6d !important;}
 
-.request{background:#ffd6e7!important;color:red;font-weight:bold;}
+.selected{outline:3px solid #007aff;}
 
-@media print{
-  button,select,input{display:none;}
-  .cell,.header-cell,.name-col{width:55px;height:55px;}
+@media(min-width:768px){
+  :root{--cell-size:70px;}
 }
 </style>
 </head>
@@ -44,17 +56,28 @@ button,select,input{padding:8px;margin:5px;}
 
 <h2>シフト表</h2>
 
-<!-- 月切り替え -->
+<input id="password" type="password" placeholder="管理者パスワード">
+<button onclick="login()">ログイン</button>
+<button onclick="logout()">ログアウト</button>
+
+<br>
+
 <select id="yearSelect"></select>
 <select id="monthSelect"></select>
 
 <br>
 
 <button onclick="generate()">自動作成</button>
+<button onclick="autoFix()">自動修正</button>
 <button onclick="saveData()">保存</button>
 <button onclick="loadData()">読込</button>
 <button onclick="downloadCSV()">CSV</button>
-<button onclick="window.print()">印刷</button>
+<button onclick="shareURL()">共有</button>
+
+<br>
+
+<button onclick="sortByNight()">夜勤多い順</button>
+<button onclick="sortByName()">名前順</button>
 
 <br>
 
@@ -63,7 +86,6 @@ button,select,input{padding:8px;margin:5px;}
 
 <br>
 
-<!-- 勤務人数設定 -->
 早<input type="number" id="earlyNum" value="1">
 日<input type="number" id="dayNum" value="2">
 遅<input type="number" id="lateNum" value="1">
@@ -77,31 +99,50 @@ button,select,input{padding:8px;margin:5px;}
 
 <div id="shiftList"></div>
 
-<div id="selector">
-  <button onclick="setShift('早番')">早</button>
-  <button onclick="setShift('日勤')">日</button>
-  <button onclick="setShift('遅番')">遅</button>
-  <button onclick="setShift('夜勤')">夜</button>
-  <button onclick="setShift('休み')">休</button>
+<div>
+  <button onmousedown="currentType='早番'">○</button>
+  <button onmousedown="currentType='日勤'">日</button>
+  <button onmousedown="currentType='遅番'">◎</button>
+  <button onmousedown="currentType='夜勤'">夜</button>
+  <button onmousedown="currentType='明け'">/</button>
+  <button onmousedown="currentType='休み'">休</button>
 </div>
 
 <script>
 
-let staffList=["山田","佐藤","田中","鈴木"];
-let requestOff={};
-let shifts={},counts={},current=null;
+let isAdmin=false;
+const ADMIN_PASSWORD="1234";
+const MAX_CONSECUTIVE=5;
 
-let year=2026;
-let month=3;
-let days=30;
+let staffList=["山田","佐藤","田中"];
+let requestOff={},shifts={},counts={};
 
-// ===== 月日生成 =====
+let selectedCell=null;
+let isDragging=false;
+let currentType=null;
+
+let year=2026,month=3,days=30;
+
+// ===== ログイン =====
+function login(){
+  if(document.getElementById("password").value===ADMIN_PASSWORD){
+    isAdmin=true;
+    alert("管理者ON");
+  }else alert("NG");
+}
+
+function logout(){
+  isAdmin=false;
+  alert("ログアウト");
+}
+
+// ===== 日数 =====
 function updateDays(){
   days=new Date(year,month+1,0).getDate();
   initDaySelect();
 }
 
-// ===== UI初期化 =====
+// ===== UI =====
 const staffSelect=document.getElementById("staffSelect");
 const daySelect=document.getElementById("daySelect");
 
@@ -123,7 +164,7 @@ function initDaySelect(){
   }
 }
 
-// ===== 年月UI =====
+// 年月
 const ySel=document.getElementById("yearSelect");
 const mSel=document.getElementById("monthSelect");
 
@@ -144,10 +185,9 @@ mSel.value=month;
 ySel.onchange=()=>{year=Number(ySel.value);updateDays();}
 mSel.onchange=()=>{month=Number(mSel.value);updateDays();}
 
-updateDays();
-initUI();
+updateDays();initUI();
 
-// ===== スタッフ =====
+// ===== 追加 =====
 function addStaff(){
   const name=document.getElementById("newStaff").value;
   if(!name) return;
@@ -155,58 +195,43 @@ function addStaff(){
   initUI();
 }
 
-// ===== 希望休 =====
 function addRequest(){
-  const name=staffSelect.value;
-  const day=Number(daySelect.value);
-  if(!requestOff[name]) requestOff[name]=[];
-  requestOff[name].push(day);
+  const n=staffSelect.value;
+  const d=Number(daySelect.value);
+  if(!requestOff[n]) requestOff[n]=[];
+  requestOff[n].push(d);
   render();
 }
 
-// ===== 人数取得 =====
-function getMax(){
-  return {
-    早番:Number(document.getElementById("earlyNum").value),
-    日勤:Number(document.getElementById("dayNum").value),
-    遅番:Number(document.getElementById("lateNum").value),
-    夜勤:Number(document.getElementById("nightNum").value)
-  };
-}
-
-// ===== 判定 =====
+// ===== 制約 =====
 function canAssign(name,day,type,count,max){
 
-  if(requestOff[name]?.includes(day)){
-    if(type!=="休み") return false;
-  }
+  if(requestOff[name]?.includes(day)) if(type!=="休み") return false;
 
-  if(day>1 && shifts[name][day-2]==="夜勤"){
-    return type==="明け";
+  if(day>1 && shifts[name][day-2]==="夜勤") return type==="明け";
+
+  // 連勤制限
+  let work=0;
+  for(let i=day-1;i>=0;i--){
+    if(shifts[name][i] && shifts[name][i]!=="休み") work++;
+    else break;
   }
+  if(work>=MAX_CONSECUTIVE && type!=="休み") return false;
 
   if(type==="明け") return false;
-
   if(type!=="休み" && count[type]>=max[type]) return false;
 
   return true;
 }
 
-// ===== バランス =====
-function getBalanced(name,day,count,max){
-  const order=Object.entries(counts[name])
-    .sort((a,b)=>a[1]-b[1]).map(e=>e[0]);
-
-  for(let t of order){
-    if(canAssign(name,day,t,count,max)) return t;
-  }
-  return "休み";
-}
-
 // ===== 自動 =====
 function generate(){
-
-  const max=getMax();
+  const max={
+    早番:+earlyNum.value,
+    日勤:+dayNum.value,
+    遅番:+lateNum.value,
+    夜勤:+nightNum.value
+  };
 
   shifts={};counts={};
 
@@ -216,52 +241,56 @@ function generate(){
   });
 
   for(let d=1;d<=days;d++){
-
     let count={早番:0,日勤:0,遅番:0,夜勤:0};
 
     staffList.forEach(n=>{
-
       if(d>1 && shifts[n][d-2]==="夜勤"){
         shifts[n][d-1]="明け";
         counts[n].明け++;
         return;
       }
 
-      const s=getBalanced(n,d,count,max);
-
-      shifts[n][d-1]=s;
-      counts[n][s]++;
-      if(s!=="明け") count[s]++;
+      let types=["早番","日勤","遅番","夜勤","休み"];
+      for(let t of types){
+        if(canAssign(n,d,t,count,max)){
+          shifts[n][d-1]=t;
+          counts[n][t]++;
+          if(t!=="休み") count[t]++;
+          break;
+        }
+      }
     });
   }
+  render();
+}
 
+function autoFix(){generate();}
+
+// ===== 編集 =====
+function applyShift(n,i,type){
+  if(!isAdmin) return;
+
+  shifts[n][i]=type;
   render();
 }
 
 // ===== 描画 =====
 function render(){
-
   const c=document.getElementById("shiftList");
   c.innerHTML="";
 
   const header=document.createElement("div");
-  header.className="row header";
+  header.className="row";
   header.appendChild(document.createElement("div"));
 
   for(let i=1;i<=days;i++){
     let d=document.createElement("div");
     d.className="header-cell";
-
-    let date=new Date(year,month,i);
-    let w=["日","月","火","水","木","金","土"][date.getDay()];
-
-    d.innerHTML=`${i}<br>${w}`;
+    let w=["日","月","火","水","木","金","土"][new Date(year,month,i).getDay()];
+    d.innerHTML=i+"<br>"+w;
     if(w==="土"||w==="日") d.classList.add("weekend");
-
     header.appendChild(d);
   }
-
-  header.appendChild(document.createElement("div"));
   c.appendChild(header);
 
   staffList.forEach(n=>{
@@ -275,49 +304,61 @@ function render(){
 
     for(let i=0;i<days;i++){
       let val=shifts[n]?.[i]||"";
-
       let cell=document.createElement("div");
       cell.className="cell";
 
-      if(val==="早番") cell.classList.add("early");
-      if(val==="日勤") cell.classList.add("day");
-      if(val==="遅番") cell.classList.add("late");
       if(val==="夜勤") cell.classList.add("night");
-      if(val==="休み") cell.classList.add("off");
-      if(val==="明け") cell.classList.add("ake");
+      if(requestOff[n]?.includes(i+1)) cell.classList.add("request");
 
-      if(requestOff[n]?.includes(i+1)){
-        cell.classList.add("request");
-      }
+      let w=new Date(year,month,i+1).getDay();
+      if(w===0||w===6) cell.classList.add("weekend");
 
-      cell.innerHTML=val==="明け"?"△":val;
+      // 記号
+      if(val==="早番") cell.innerHTML="○";
+      else if(val==="遅番") cell.innerHTML="◎";
+      else if(val==="夜勤") cell.innerHTML="夜";
+      else if(val==="明け") cell.innerHTML="/";
+      else if(val==="休み") cell.innerHTML="休";
+
+      // 編集
+      cell.onmousedown=()=>{isDragging=true;}
+      cell.onmouseover=()=>{if(isDragging && currentType) applyShift(n,i,currentType);}
+      cell.onclick=()=>{if(currentType) applyShift(n,i,currentType);}
+
       row.appendChild(cell);
     }
-
-    row.appendChild(document.createElement("div"));
     c.appendChild(row);
   });
+
+  document.body.onmouseup=()=>isDragging=false;
+
+  // バランス表示
+  let sum=document.createElement("div");
+  staffList.forEach(n=>{
+    let cts=counts[n]||{};
+    let d=document.createElement("div");
+    d.textContent=`${n} 早:${cts.早番||0} 日:${cts.日勤||0} 遅:${cts.遅番||0} 夜:${cts.夜勤||0}`;
+    sum.appendChild(d);
+  });
+  c.appendChild(sum);
 }
 
-// ===== CSV =====
-function downloadCSV(){
-  let csv="名前";
-  for(let i=1;i<=days;i++) csv+=`,`+i;
-  csv+="\n";
+// ===== 並び替え =====
+function sortByNight(){
+  staffList.sort((a,b)=>(counts[b]?.夜勤||0)-(counts[a]?.夜勤||0));
+  render();
+}
+function sortByName(){
+  staffList.sort();
+  render();
+}
 
-  staffList.forEach(n=>{
-    let row=n;
-    for(let i=0;i<days;i++){
-      row+=`,`+(shifts[n]?.[i]||"");
-    }
-    csv+=row+"\n";
-  });
-
-  const blob=new Blob([csv]);
-  const link=document.createElement("a");
-  link.href=URL.createObjectURL(blob);
-  link.download="shift.csv";
-  link.click();
+// ===== 共有 =====
+function shareURL(){
+  const data=btoa(JSON.stringify({staffList,requestOff,shifts,year,month}));
+  const url=location.origin+location.pathname+"?data="+data;
+  navigator.clipboard.writeText(url);
+  alert("URLコピーした");
 }
 
 // ===== 保存 =====
@@ -325,27 +366,32 @@ function saveData(){
   localStorage.setItem("shiftApp",
     JSON.stringify({staffList,requestOff,shifts,year,month})
   );
-  alert("保存OK");
 }
 
-// ===== 読込 =====
 function loadData(){
   const d=JSON.parse(localStorage.getItem("shiftApp"));
   if(!d) return;
-
   staffList=d.staffList;
   requestOff=d.requestOff;
   shifts=d.shifts;
   year=d.year;
   month=d.month;
-
-  ySel.value=year;
-  mSel.value=month;
-
-  updateDays();
-  initUI();
-  render();
+  initUI();updateDays();render();
 }
+
+// URL読み込み
+window.onload=()=>{
+  const p=new URLSearchParams(location.search);
+  if(p.get("data")){
+    let d=JSON.parse(atob(p.get("data")));
+    staffList=d.staffList;
+    requestOff=d.requestOff;
+    shifts=d.shifts;
+    year=d.year;
+    month=d.month;
+  }
+  initUI();updateDays();render();
+};
 
 </script>
 </body>
