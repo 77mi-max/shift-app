@@ -6,393 +6,301 @@
 <title>シフト表</title>
 
 <style>
-*{box-sizing:border-box;}
-body{font-family:-apple-system;padding:20px;background:#f5f5f5;}
+*{box-sizing:border-box}
+body{font-family:-apple-system;padding:10px;background:#f5f7fb}
 
-button,select,input{padding:6px;margin:3px;}
+.topbar{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
+input,button{padding:6px;border-radius:6px;border:none}
+button{background:#007aff;color:#fff}
 
-.row{display:flex;}
-#shiftList{overflow-x:auto;}
+#shiftList{overflow-x:auto;background:#fff;border-radius:10px}
 
-:root{
-  --cell-size: calc((100vw - 80px) / 8);
+.row{display:flex}
+.cell{
+  width:60px;height:60px;
+  border:1px solid #eee;
+  display:flex;align-items:center;justify-content:center;
+  flex-direction:column;font-size:13px;
 }
-
-.cell,.header-cell{
-  width:var(--cell-size);
-  aspect-ratio:1/1;
-  border:1px solid #ccc;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-size:16px;
-  font-weight:bold;
-  color:#000;
-  background:#fff;
-}
-
 .name-col{
-  width:80px;
-  min-width:80px;
-  aspect-ratio:1/1;
-  position:sticky;
-  left:0;
-  background:#fff;
+  width:90px;min-width:90px;
+  position:sticky;left:0;background:#fff;z-index:10;font-weight:bold
 }
+.header{position:sticky;top:0;background:#fff;z-index:20}
 
-.night{background:#cce5ff;}
-.weekend{background:#fff3cd !important;}
-.request{background:#ffd6e7 !important;color:#ff4d6d !important;}
+.weekend{background:#fff6dc}
+.夜{background:#cce5ff}
+.休{background:#ffd6e7;color:#c00}
+.明{color:#888}
+.早{background:#fff2cc}
+.遅{background:#f3e5ff}
+.request{background:#ffd6e7!important;color:#c00;font-weight:bold}
 
-.selected{outline:3px solid #007aff;}
-
-@media(min-width:768px){
-  :root{--cell-size:70px;}
+@media print{
+  button,input{display:none}
+  .cell{width:25px;height:25px;font-size:10px}
 }
 </style>
 </head>
 
 <body>
 
-<h2>シフト表</h2>
-
-<input id="password" type="password" placeholder="管理者パスワード">
+<div class="topbar">
+<input id="password" type="password" placeholder="管理者">
 <button onclick="login()">ログイン</button>
-<button onclick="logout()">ログアウト</button>
 
-<br>
-
-<select id="yearSelect"></select>
-<select id="monthSelect"></select>
-
-<br>
-
-<button onclick="generate()">自動作成</button>
-<button onclick="autoFix()">自動修正</button>
-<button onclick="saveData()">保存</button>
-<button onclick="loadData()">読込</button>
-<button onclick="downloadCSV()">CSV</button>
-<button onclick="shareURL()">共有</button>
-
-<br>
-
-<button onclick="sortByNight()">夜勤多い順</button>
-<button onclick="sortByName()">名前順</button>
-
-<br>
-
-<input id="newStaff" placeholder="スタッフ名">
+<input id="nameInput" placeholder="名前">
 <button onclick="addStaff()">追加</button>
 
-<br>
+<label><input type="checkbox" onchange="toggleType('早')">早</label>
+<label><input type="checkbox" onchange="toggleType('遅')">遅</label>
 
-早<input type="number" id="earlyNum" value="1">
-日<input type="number" id="dayNum" value="2">
-遅<input type="number" id="lateNum" value="1">
-夜<input type="number" id="nightNum" value="1">
-
-<br>
-
-<select id="staffSelect"></select>
-<select id="daySelect"></select>
-<button onclick="addRequest()">希望休</button>
-
-<div id="shiftList"></div>
-
-<div>
-  <button onmousedown="currentType='早番'">○</button>
-  <button onmousedown="currentType='日勤'">日</button>
-  <button onmousedown="currentType='遅番'">◎</button>
-  <button onmousedown="currentType='夜勤'">夜</button>
-  <button onmousedown="currentType='明け'">/</button>
-  <button onmousedown="currentType='休み'">休</button>
+<button onclick="optimize()">最適化</button>
+<button onclick="window.print()">印刷</button>
 </div>
 
-<script>
+<!-- 人数設定 -->
+<div class="topbar">
+日<input id="need日" type="number" value="2" style="width:50px">
+夜<input id="need夜" type="number" value="1" style="width:50px">
+</div>
 
+<div id="shiftList"></div>
+<div id="shiftButtons"></div>
+
+<script>
 let isAdmin=false;
 const ADMIN_PASSWORD="1234";
-const MAX_CONSECUTIVE=5;
 
-let staffList=["山田","佐藤","田中"];
-let requestOff={},shifts={},counts={};
-
+let names=["佐藤","山田","田中"];
+let shifts={};
+let requestOff={};
 let selectedCell=null;
-let isDragging=false;
-let currentType=null;
 
-let year=2026,month=3,days=30;
+let enabledTypes=["日","夜","休"];
 
-// ===== ログイン =====
+const ngPairs=[["佐藤","山田"]];
+
+const year=2026,month=3;
+const daysInMonth=new Date(year,month+1,0).getDate();
+
+/* 初期化 */
+function init(){
+  names.forEach(n=>{
+    if(!shifts[n]) shifts[n]=Array(daysInMonth).fill("");
+  });
+}
+
+/* 管理者 */
 function login(){
-  if(document.getElementById("password").value===ADMIN_PASSWORD){
-    isAdmin=true;
-    alert("管理者ON");
-  }else alert("NG");
+  if(password.value===ADMIN_PASSWORD){isAdmin=true;alert("ON")}
 }
 
-function logout(){
-  isAdmin=false;
-  alert("ログアウト");
+/* 勤務切替 */
+function toggleType(t){
+  enabledTypes=enabledTypes.includes(t)?
+  enabledTypes.filter(x=>x!==t):[...enabledTypes,t];
+  renderButtons();
 }
 
-// ===== 日数 =====
-function updateDays(){
-  days=new Date(year,month+1,0).getDate();
-  initDaySelect();
-}
-
-// ===== UI =====
-const staffSelect=document.getElementById("staffSelect");
-const daySelect=document.getElementById("daySelect");
-
-function initUI(){
-  staffSelect.innerHTML="";
-  staffList.forEach(n=>{
-    let o=document.createElement("option");
-    o.value=n;o.textContent=n;
-    staffSelect.appendChild(o);
-  });
-}
-
-function initDaySelect(){
-  daySelect.innerHTML="";
-  for(let i=1;i<=days;i++){
-    let o=document.createElement("option");
-    o.value=i;o.textContent=i+"日";
-    daySelect.appendChild(o);
-  }
-}
-
-// 年月
-const ySel=document.getElementById("yearSelect");
-const mSel=document.getElementById("monthSelect");
-
-for(let y=2024;y<=2030;y++){
-  let o=document.createElement("option");
-  o.value=y;o.textContent=y;
-  ySel.appendChild(o);
-}
-ySel.value=year;
-
-for(let m=1;m<=12;m++){
-  let o=document.createElement("option");
-  o.value=m-1;o.textContent=m+"月";
-  mSel.appendChild(o);
-}
-mSel.value=month;
-
-ySel.onchange=()=>{year=Number(ySel.value);updateDays();}
-mSel.onchange=()=>{month=Number(mSel.value);updateDays();}
-
-updateDays();initUI();
-
-// ===== 追加 =====
+/* スタッフ */
 function addStaff(){
-  const name=document.getElementById("newStaff").value;
-  if(!name) return;
-  staffList.push(name);
-  initUI();
-}
-
-function addRequest(){
-  const n=staffSelect.value;
-  const d=Number(daySelect.value);
-  if(!requestOff[n]) requestOff[n]=[];
-  requestOff[n].push(d);
+  const n=nameInput.value;
+  if(!n)return;
+  names.push(n);
+  shifts[n]=Array(daysInMonth).fill("");
   render();
 }
 
-// ===== 制約 =====
-function canAssign(name,day,type,count,max){
-
-  if(requestOff[name]?.includes(day)) if(type!=="休み") return false;
-
-  if(day>1 && shifts[name][day-2]==="夜勤") return type==="明け";
-
-  // 連勤制限
-  let work=0;
-  for(let i=day-1;i>=0;i--){
-    if(shifts[name][i] && shifts[name][i]!=="休み") work++;
-    else break;
-  }
-  if(work>=MAX_CONSECUTIVE && type!=="休み") return false;
-
-  if(type==="明け") return false;
-  if(type!=="休み" && count[type]>=max[type]) return false;
-
-  return true;
+/* 表示 */
+function getMark(s){
+  if(s==="夜")return"夜";
+  if(s==="休")return"休";
+  if(s==="明")return"/";
+  return s||"";
 }
 
-// ===== 自動 =====
-function generate(){
-  const max={
-    早番:+earlyNum.value,
-    日勤:+dayNum.value,
-    遅番:+lateNum.value,
-    夜勤:+nightNum.value
-  };
+/* ペア禁止 */
+function isPairNG(name,day,type){
+  for(const [a,b] of ngPairs){
+    if(name===a||name===b){
+      const other=name===a?b:a;
+      if(shifts[other]?.[day]===type) return true;
+    }
+  }
+  return false;
+}
 
-  shifts={};counts={};
+/* セット */
+function setShift(type){
+  if(!isAdmin||!selectedCell)return;
+  const{name,day}=selectedCell;
 
-  staffList.forEach(n=>{
-    shifts[n]=[];
-    counts[n]={早番:0,日勤:0,遅番:0,夜勤:0,休み:0,明け:0};
+  if(isPairNG(name,day,type)) return alert("NGペア");
+
+  if(type==="夜"&&day<daysInMonth-1){
+    shifts[name][day+1]="明";
+  }
+
+  shifts[name][day]=type;
+  render();
+}
+
+/* ボタン */
+function renderButtons(){
+  shiftButtons.innerHTML="";
+  enabledTypes.forEach(t=>{
+    const b=document.createElement("button");
+    b.textContent=t;
+    b.onclick=()=>setShift(t);
+    shiftButtons.appendChild(b);
+  });
+}
+
+/* 評価 */
+function evaluate(){
+  let score=0;
+
+  for(let d=0;d<daysInMonth;d++){
+    let c={日:0,夜:0};
+
+    names.forEach(n=>{
+      const s=shifts[n][d];
+
+      if(c[s]!==undefined)c[s]++;
+
+      if(requestOff[n]?.includes(d)&&s!=="休")score+=100;
+
+      if(d>0&&shifts[n][d-1]==="夜"&&s!=="明")score+=100;
+    });
+
+    const need日=+document.getElementById("need日").value;
+    const need夜=+document.getElementById("need夜").value;
+
+    score+=Math.abs(c.日-need日)*50;
+    score+=Math.abs(c.夜-need夜)*50;
+  }
+
+  return score;
+}
+
+/* 最適化 */
+function optimize(){
+  if(!isAdmin)return;
+
+  // 初期
+  names.forEach(n=>{
+    shifts[n]=Array(daysInMonth).fill("");
   });
 
-  for(let d=1;d<=days;d++){
-    let count={早番:0,日勤:0,遅番:0,夜勤:0};
+  names.forEach(n=>{
+    requestOff[n]?.forEach(d=>shifts[n][d]="休");
+  });
 
-    staffList.forEach(n=>{
-      if(d>1 && shifts[n][d-2]==="夜勤"){
-        shifts[n][d-1]="明け";
-        counts[n].明け++;
-        return;
-      }
+  let best=JSON.parse(JSON.stringify(shifts));
+  let bestScore=evaluate();
 
-      let types=["早番","日勤","遅番","夜勤","休み"];
-      for(let t of types){
-        if(canAssign(n,d,t,count,max)){
-          shifts[n][d-1]=t;
-          counts[n][t]++;
-          if(t!=="休み") count[t]++;
-          break;
-        }
-      }
-    });
+  let temp=100;
+
+  for(let i=0;i<4000;i++){
+    let newS=JSON.parse(JSON.stringify(shifts));
+
+    const n=names[Math.random()*names.length|0];
+    const d=Math.random()*daysInMonth|0;
+
+    const types=enabledTypes;
+    newS[n][d]=types[Math.random()*types.length|0];
+
+    const old=shifts;
+    shifts=newS;
+
+    let s=evaluate();
+
+    if(s<bestScore||Math.random()<Math.exp((bestScore-s)/temp)){
+      best=JSON.parse(JSON.stringify(shifts));
+      bestScore=s;
+    }else{
+      shifts=old;
+    }
+
+    temp*=0.995;
   }
+
+  shifts=best;
   render();
+  alert("完了 score:"+bestScore);
 }
 
-function autoFix(){generate();}
-
-// ===== 編集 =====
-function applyShift(n,i,type){
-  if(!isAdmin) return;
-
-  shifts[n][i]=type;
-  render();
-}
-
-// ===== 描画 =====
+/* 描画 */
 function render(){
-  const c=document.getElementById("shiftList");
-  c.innerHTML="";
+  shiftList.innerHTML="";
 
   const header=document.createElement("div");
-  header.className="row";
-  header.appendChild(document.createElement("div"));
+  header.className="row header";
 
-  for(let i=1;i<=days;i++){
-    let d=document.createElement("div");
-    d.className="header-cell";
-    let w=["日","月","火","水","木","金","土"][new Date(year,month,i).getDay()];
-    d.innerHTML=i+"<br>"+w;
-    if(w==="土"||w==="日") d.classList.add("weekend");
-    header.appendChild(d);
+  const empty=document.createElement("div");
+  empty.className="cell name-col";
+  header.appendChild(empty);
+
+  for(let d=1;d<=daysInMonth;d++){
+    const cell=document.createElement("div");
+    cell.className="cell";
+
+    const date=new Date(year,month,d);
+    const day=date.getDay();
+
+    if(day===0||day===6)cell.classList.add("weekend");
+
+    cell.innerHTML=`${d}<small>${["日","月","火","水","木","金","土"][day]}</small>`;
+    header.appendChild(cell);
   }
-  c.appendChild(header);
 
-  staffList.forEach(n=>{
-    let row=document.createElement("div");
+  shiftList.appendChild(header);
+
+  names.forEach(name=>{
+    const row=document.createElement("div");
     row.className="row";
 
-    let nc=document.createElement("div");
-    nc.className="cell name-col";
-    nc.textContent=n;
-    row.appendChild(nc);
+    const nameCell=document.createElement("div");
+    nameCell.className="cell name-col";
+    nameCell.textContent=name;
+    row.appendChild(nameCell);
 
-    for(let i=0;i<days;i++){
-      let val=shifts[n]?.[i]||"";
-      let cell=document.createElement("div");
+    for(let d=0;d<daysInMonth;d++){
+      const cell=document.createElement("div");
       cell.className="cell";
 
-      if(val==="夜勤") cell.classList.add("night");
-      if(requestOff[n]?.includes(i+1)) cell.classList.add("request");
+      const shift=shifts[name][d];
+      cell.textContent=getMark(shift);
 
-      let w=new Date(year,month,i+1).getDay();
-      if(w===0||w===6) cell.classList.add("weekend");
+      if(shift)cell.classList.add(shift);
+      if(requestOff[name]?.includes(d))cell.classList.add("request");
 
-      // 記号
-      if(val==="早番") cell.innerHTML="○";
-      else if(val==="遅番") cell.innerHTML="◎";
-      else if(val==="夜勤") cell.innerHTML="夜";
-      else if(val==="明け") cell.innerHTML="/";
-      else if(val==="休み") cell.innerHTML="休";
+      cell.onclick=()=>selectedCell={name,day:d};
 
-      // 編集
-      cell.onmousedown=()=>{isDragging=true;}
-      cell.onmouseover=()=>{if(isDragging && currentType) applyShift(n,i,currentType);}
-      cell.onclick=()=>{if(currentType) applyShift(n,i,currentType);}
+      cell.ondblclick=()=>{
+        if(!requestOff[name])requestOff[name]=[];
+        if(requestOff[name].includes(d)){
+          requestOff[name]=requestOff[name].filter(x=>x!==d);
+        }else{
+          requestOff[name].push(d);
+          shifts[name][d]="休";
+        }
+        render();
+      };
 
       row.appendChild(cell);
     }
-    c.appendChild(row);
+
+    shiftList.appendChild(row);
   });
-
-  document.body.onmouseup=()=>isDragging=false;
-
-  // バランス表示
-  let sum=document.createElement("div");
-  staffList.forEach(n=>{
-    let cts=counts[n]||{};
-    let d=document.createElement("div");
-    d.textContent=`${n} 早:${cts.早番||0} 日:${cts.日勤||0} 遅:${cts.遅番||0} 夜:${cts.夜勤||0}`;
-    sum.appendChild(d);
-  });
-  c.appendChild(sum);
 }
 
-// ===== 並び替え =====
-function sortByNight(){
-  staffList.sort((a,b)=>(counts[b]?.夜勤||0)-(counts[a]?.夜勤||0));
-  render();
-}
-function sortByName(){
-  staffList.sort();
-  render();
-}
-
-// ===== 共有 =====
-function shareURL(){
-  const data=btoa(JSON.stringify({staffList,requestOff,shifts,year,month}));
-  const url=location.origin+location.pathname+"?data="+data;
-  navigator.clipboard.writeText(url);
-  alert("URLコピーした");
-}
-
-// ===== 保存 =====
-function saveData(){
-  localStorage.setItem("shiftApp",
-    JSON.stringify({staffList,requestOff,shifts,year,month})
-  );
-}
-
-function loadData(){
-  const d=JSON.parse(localStorage.getItem("shiftApp"));
-  if(!d) return;
-  staffList=d.staffList;
-  requestOff=d.requestOff;
-  shifts=d.shifts;
-  year=d.year;
-  month=d.month;
-  initUI();updateDays();render();
-}
-
-// URL読み込み
-window.onload=()=>{
-  const p=new URLSearchParams(location.search);
-  if(p.get("data")){
-    let d=JSON.parse(atob(p.get("data")));
-    staffList=d.staffList;
-    requestOff=d.requestOff;
-    shifts=d.shifts;
-    year=d.year;
-    month=d.month;
-  }
-  initUI();updateDays();render();
-};
-
+/* 起動 */
+init();
+render();
+renderButtons();
 </script>
+
 </body>
 </html>
