@@ -2,278 +2,587 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>ShiftCare</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<!-- ファビコン -->
-<link rel="icon" href="logo.png">
+<title>シフト管理</title>
+
+<link rel="manifest" href="manifest.json">
 
 <style>
-body {
-  margin:0;
-  font-family:-apple-system, BlinkMacSystemFont;
-  background:#f5f5f5;
-}
+body{font-family:-apple-system;padding:10px;background:#f5f5f5;}
 
-/* ヘッダー */
-.top {
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  padding:12px 16px;
-  background:#fff;
-  box-shadow:0 2px 8px rgba(0,0,0,0.05);
-}
-
-.logo {
-  display:flex;
-  align-items:center;
-  gap:8px;
-}
-
-.logo img {
-  width:32px;
-}
-
-.logo h1 {
-  font-size:20px;
-  margin:0;
-}
-
-/* ボタン */
-button {
+button{
+  padding:8px;
+  margin:3px;
   background:#007aff;
   color:#fff;
   border:none;
-  padding:8px 12px;
   border-radius:8px;
-  cursor:pointer;
 }
 
-button.secondary {
-  background:#e0e0e0;
-  color:#333;
-}
-
-/* カード */
-.container {
-  max-width:1200px;
-  margin:auto;
-  padding:16px;
-}
-
-.card {
-  background:#fff;
-  border-radius:16px;
-  box-shadow:0 4px 16px rgba(0,0,0,0.08);
-  padding:16px;
-}
-
-/* テーブル */
-table {
-  width:100%;
+table{
   border-collapse:collapse;
+  width:100%;
+  background:#fff;
 }
 
-th, td {
-  border:1px solid #ccc;
-  padding:6px;
+td,th{
+  border:1px solid #ddd;
   text-align:center;
   font-size:12px;
+  height:35px;
 }
 
-/* 色ルール */
-.day { background:#fff; color:#000; }
-.night { background:#cce5ff; color:#000; }
-.off { background:#ffd6d6; color:#000; }
-.after { background:#fff; color:#000; }
-
-.weekend { background:#fff3cd; }
-.weekend-day { background:#ffe08a; }
-
-.wish {
-  color:red !important;
-  font-weight:bold;
-}
-
-/* 印刷 */
-@media print {
-  button { display:none; }
-
-  @page {
-    size:A4 landscape;
-    margin:10mm;
-  }
-
-  table {
-    font-size:9px;
-  }
-
-  th, td {
-    border:1px solid #000;
-    padding:3px;
-  }
-}
+.day{background:#fff;}
+.night{background:#dbeafe;}
+.off{background:#ffd6e7;}
+.warning{background:#ffcccc !important;}
+.lock{opacity:0.4; pointer-events:none;}
+.wish{color:red;font-weight:bold;}
 </style>
 </head>
 
 <body>
 
-<!-- ヘッダー -->
-<header class="top">
-  <div class="logo">
-    <img src="logo.png">
-    <h1>ShiftCare</h1>
-  </div>
+<h3>シフト表</h3>
 
-  <div>
-    <button onclick="exportCSV()">CSV</button>
-    <button onclick="exportPDF()">PDF</button>
-  </div>
-</header>
+<button onclick="generateShift()">自動生成（AI）</button>
+<button onclick="generateWishes()">希望休AI</button>
 
-<div class="container">
-  <div class="card">
+<div id="table"></div>
 
-    <h2 id="monthLabel"></h2>
-
-    <table id="shiftTable"></table>
-
-    <p style="font-size:12px; color:#888;">
-      医療・介護現場向けシフト管理ツール
-    </p>
-
-    <p style="font-size:12px; color:#888;">
-      © 2026 ShiftCare
-    </p>
-
-  </div>
-</div>
+<script type="module" src="script.js"></script>
 
 <script>
-let currentYear = 2026;
-let currentMonth = 1;
-let shifts = {
-  "田中": [],
-  "佐藤": []
-};
-let holidays = {};
-
-// 祝日取得
-async function loadHolidays(year){
-  let res = await fetch("https://holidays-jp.github.io/api/v1/date.json");
-  let data = await res.json();
-
-  holidays = Object.fromEntries(
-    Object.entries(data).filter(([k]) => k.startsWith(year + "-"))
-  );
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js");
 }
-
-// 判定
-function isHoliday(y,m,d){
-  let key = y + "-" + String(m).padStart(2,"0") + "-" + String(d).padStart(2,"0");
-  return holidays[key];
-}
-
-// 描画
-function render(){
-  let days = new Date(currentYear, currentMonth, 0).getDate();
-
-  document.getElementById("monthLabel").innerText =
-    currentYear + "年 " + currentMonth + "月";
-
-  let html = "<tr><th>名前</th>";
-  for(let d=1; d<=days; d++){
-    html += "<th>"+d+"</th>";
-  }
-  html += "</tr>";
-
-  for(let name in shifts){
-    html += "<tr><td>"+name+"</td>";
-
-    for(let d=0; d<days; d++){
-      let v = shifts[name][d] || "";
-
-      let date = new Date(currentYear, currentMonth-1, d+1);
-      let day = date.getDay();
-      let isWeekend = (day===0 || day===6);
-      let holiday = isHoliday(currentYear, currentMonth, d+1);
-
-      let cls = "";
-
-      if(v==="日") cls="day";
-      if(v==="夜") cls="night";
-      if(v==="休") cls="off";
-      if(v==="/") cls="after";
-
-      if(isWeekend || holiday){
-        if(v==="日") cls="weekend-day";
-        else cls+=" weekend";
-      }
-
-      html += `<td class="${cls}" onclick="edit('${name}',${d})">${v}</td>`;
-    }
-
-    html += "</tr>";
-  }
-
-  document.getElementById("shiftTable").innerHTML = html;
-}
-
-// 編集
-function edit(name, day){
-  let v = prompt("日・夜・休・/");
-  shifts[name][day] = v;
-  saveShift();
-  render();
-}
-
-// 保存
-function saveShift(){
-  localStorage.setItem("shift", JSON.stringify(shifts));
-}
-
-// CSV
-function exportCSV(){
-  let days = new Date(currentYear, currentMonth, 0).getDate();
-
-  let csv = "ShiftCare シフト表\n\n名前,";
-  for(let d=1; d<=days; d++) csv += d + ",";
-  csv += "\n";
-
-  for(let name in shifts){
-    csv += name + ",";
-    for(let d=0; d<days; d++){
-      csv += (shifts[name][d] || "") + ",";
-    }
-    csv += "\n";
-  }
-
-  download(csv, "shift.csv");
-}
-
-function download(content, filename){
-  let blob = new Blob([content]);
-  let a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
-}
-
-// PDF
-function exportPDF(){
-  alert("PDFとして保存してください");
-  window.print();
-}
-
-// 初期化
-(async()=>{
-  let saved = localStorage.getItem("shift");
-  if(saved) shifts = JSON.parse(saved);
-
-  await loadHolidays(currentYear);
-  render();
-})();
 </script>
+
+<script>
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("service-worker.js");
+  }
+  </script>
 
 </body>
 </html>
+
+body {
+  font-family: -apple-system;
+  margin:0;
+  background:#f2f2f7;
+}
+
+header {
+  display:flex;
+  justify-content:space-between;
+  padding:10px;
+  background:white;
+  position:sticky;
+  top:0;
+}
+
+table {
+  border-collapse: collapse;
+  width:100%;
+}
+
+td, th {
+  border:1px solid #ddd;
+  text-align:center;
+  height:40px;
+}
+
+.day { background:white; }
+.night { background:#dbeafe; }
+.off { background:#fbcfe8; }
+.after { background:white; }
+
+.holiday { background:#fff3cd; }
+.holiday.day { background:#ffe066; }
+
+.warn { background:#ffe5e5; }
+
+.disabled {
+  opacity:0.4;
+  pointer-events:none;
+}
+
+.addBtn {
+  position:fixed;
+  bottom:20px;
+  right:20px;
+  background:#007aff;
+  color:white;
+  border:none;
+  border-radius:50%;
+  padding:15px;
+}
+
+.warning{
+  background:#ffcccc !important;
+}
+
+self.addEventListener("install",e=>{
+    e.waitUntil(
+      caches.open("shift").then(c=>{
+        return c.addAll([
+          "./",
+          "./index.html",
+          "./script.js",
+          "./manifest.json"
+        ]);
+      })
+    );
+  });
+  
+  self.addEventListener("fetch",e=>{
+    e.respondWith(
+      caches.match(e.request).then(r=>r||fetch(e.request))
+    );
+  });
+
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "YOUR_KEY",
+  authDomain: "YOUR_DOMAIN",
+  projectId: "YOUR_ID",
+};
+
+const app = initializeApp(firebaseConfig);
+
+export const db = getFirestore(app);
+export const auth = getAuth(app);
+import { auth, db } from "./firebase.js";
+import {
+  signInWithPopup,
+  GoogleAuthProvider
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+import {
+  doc, getDoc, setDoc
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+let currentUser = null;
+
+export async function login(){
+
+  const provider = new GoogleAuthProvider();
+  const result = await signInWithPopup(auth, provider);
+
+  const uid = result.user.uid;
+  const ref = doc(db,"users",uid);
+  const snap = await getDoc(ref);
+
+  if(!snap.exists()){
+    const name = prompt("名前");
+    const isManager = confirm("師長ですか？");
+
+    await setDoc(ref,{
+      name,
+      role: isManager ? "manager":"staff"
+    });
+
+    currentUser = { uid, name, role: isManager ? "manager":"staff" };
+  }else{
+    currentUser = { uid, ...snap.data() };
+  }
+
+  return currentUser;
+}
+
+export function getUser(){
+  return currentUser;
+}
+import { db } from "./firebase.js";
+import { login } from "./auth.js";
+
+import {
+  doc, getDoc, setDoc, updateDoc
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+let staff = JSON.parse(localStorage.getItem("staff")||"[]");
+let shifts = JSON.parse(localStorage.getItem("shifts")||"{}");
+
+let current = new Date();
+let user;
+
+/* URL */
+function getWardId(){
+  return new URLSearchParams(location.search).get("ward");
+}
+function getInviteId(){
+  return new URLSearchParams(location.search).get("invite");
+}
+
+/* 初期 */
+window.onload = async ()=>{
+  user = await login();
+
+  let wardId = getWardId();
+
+  if(!wardId){
+    wardId = crypto.randomUUID();
+    location.href = "?ward="+wardId;
+  }
+
+  user.wardId = wardId;
+
+  await handleInvite();
+
+  render();
+};
+
+/* 招待 */
+async function handleInvite(){
+
+  const inviteId = getInviteId();
+  if(!inviteId) return;
+
+  const ref = doc(db,"invites",inviteId);
+  const snap = await getDoc(ref);
+
+  if(!snap.exists()) return;
+
+  const data = snap.data();
+
+  if(data.used || Date.now()>data.expiresAt) return;
+
+  await setDoc(
+    doc(db,"wards",data.wardId,"members",user.uid),
+    { name:user.name, role:data.role }
+  );
+
+  await updateDoc(ref,{used:true});
+}
+
+/* 権限 */
+function canEdit(name){
+  if(user.role==="manager") return true;
+  return user.name===name;
+}
+
+/* トグル */
+const order=["","日","夜","休"];
+
+window.toggle=(name,d)=>{
+  if(!canEdit(name)) return;
+
+  let v=shifts[name]?.[d]||"";
+  let next=order[(order.indexOf(v)+1)%4];
+
+  if(isOverWork(name,d)) return alert("6連勤NG");
+
+  setShift(name,d,next);
+};
+
+function setShift(name,d,val){
+  if(!shifts[name]) shifts[name]=[];
+
+  shifts[name][d]=val;
+
+  if(val==="夜") shifts[name][d+1]="/";
+
+  save();
+  render();
+}
+
+/* 連勤 */
+function isOverWork(name,d){
+  let c=0;
+  for(let i=d-5;i<=d;i++){
+    if(shifts[name]?.[i] && shifts[name][i]!=="休") c++;
+  }
+  return c>=6;
+}
+
+/* 保存 */
+function save(){
+  localStorage.setItem("shifts",JSON.stringify(shifts));
+
+  if(user.role==="manager"){
+    setDoc(doc(db,"wards",user.wardId,"data","shift"),{shifts});
+  }
+}
+
+/* 描画 */
+async function render(){
+
+  const y=current.getFullYear();
+  const m=current.getMonth();
+
+  document.getElementById("monthLabel").innerText=`${y}/${m+1}`;
+
+  const days=new Date(y,m+1,0).getDate();
+
+  const holidays=await fetch(`https://holidays-jp.github.io/api/v1/${y}/date.json`)
+    .then(r=>r.json());
+
+  let html="<table><tr><th>名前</th>";
+
+  for(let d=1;d<=days;d++){
+    let date=`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    let isHol=holidays[date]||[0,6].includes(new Date(y,m,d).getDay());
+
+    html+=`<th class="${isHol?'holiday':''}">${d}</th>`;
+  }
+
+  html+="<th>回数</th></tr>";
+
+  staff.forEach(name=>{
+    html+=`<tr><td>${name}</td>`;
+    let count=0;
+
+    for(let d=0;d<days;d++){
+      let v=shifts[name]?.[d]||"";
+
+      let cls="";
+      if(v==="日") cls="day";
+      if(v==="夜") cls="night";
+      if(v==="休") cls="off";
+
+      if(!canEdit(name)) cls+=" disabled";
+
+      html+=`<td class="${cls}" onclick="toggle('${name}',${d})">${v}</td>`;
+
+      if(v==="日"||v==="夜") count++;
+    }
+
+    html+=`<td>${count}</td></tr>`;
+  });
+
+  html+="</table>";
+
+  document.getElementById("table").innerHTML=html;
+}
+
+/* AI生成 */
+window.generateShift=()=>{
+  const days=new Date(current.getFullYear(),current.getMonth()+1,0).getDate();
+
+  staff.forEach(name=>{
+    shifts[name]=[];
+    for(let d=0;d<days;d++){
+      if(Math.random()<0.2) shifts[name][d]="休";
+      else if(Math.random()<0.3){
+        shifts[name][d]="夜";
+        shifts[name][d+1]="/";
+      }else shifts[name][d]="日";
+    }
+  });
+
+  save();
+  render();
+};
+                   {
+  "name": "シフト管理",
+  "short_name": "Shift",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#007aff"
+}
+
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getAuth, signInWithPopup, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+/* ===== Firebase ===== */
+const firebaseConfig = {
+  apiKey: "YOUR_KEY",
+  authDomain: "YOUR_DOMAIN",
+  projectId: "YOUR_ID",
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+/* ===== データ ===== */
+let staff = ["田中","佐藤","鈴木"];
+let shifts = {};
+let wishes = {};
+let user;
+let wardId;
+
+/* ===== ward分離 ===== */
+function getWard(){
+  let w = new URLSearchParams(location.search).get("ward");
+  if(!w){
+    w = crypto.randomUUID();
+    location.href = "?ward=" + w;
+  }
+  return w;
+}
+
+/* ===== login ===== */
+async function login(){
+  const res = await signInWithPopup(auth, new GoogleAuthProvider());
+  user = {
+    uid: res.user.uid,
+    name: res.user.displayName,
+    role: "manager" // ←ここ手動でもOK
+  };
+}
+
+/* ===== 初期 ===== */
+window.onload = async () => {
+  await login();
+  wardId = getWard();
+  await load();
+  render();
+};
+
+/* ===== load ===== */
+async function load(){
+  const snap = await getDoc(doc(db,"wards",wardId));
+  if(snap.exists()){
+    shifts = snap.data().shifts || {};
+    wishes = snap.data().wishes || {};
+  }
+}
+
+/* ===== save ===== */
+async function save(){
+  await setDoc(doc(db,"wards",wardId),{
+    shifts,
+    wishes
+  });
+}
+
+/* ===== 権限 ===== */
+function canEdit(name){
+  return user.role === "manager" || user.name === name;
+}
+
+/* ===== 希望休AI ===== */
+window.generateWishes = () => {
+  wishes = {};
+  staff.forEach(n=>{
+    wishes[n] = [];
+    for(let i=0;i<30;i++){
+      if(Math.random()<0.08){
+        wishes[n].push(i);
+      }
+    }
+  });
+  save();
+  render();
+};
+
+/* ===== スコア（均等化） ===== */
+function score(name){
+  let arr = shifts[name] || [];
+  let night = arr.filter(v=>v==="夜").length;
+  return night;
+}
+
+/* ===== AIシフト ===== */
+window.generateShift = () => {
+  shifts = {};
+  staff.forEach(n=>shifts[n]=Array(30).fill(""));
+
+  for(let d=0; d<30; d++){
+
+    let sorted = [...staff].sort((a,b)=>score(a)-score(b));
+
+    // 夜勤（少ない人優先）
+    if(sorted[0]) shifts[sorted[0]][d] = "夜";
+
+    // 日勤
+    if(sorted[1]) shifts[sorted[1]][d] = "日";
+    if(sorted[2]) shifts[sorted[2]][d] = "日";
+
+    staff.forEach(n=>{
+      if(!shifts[n][d]) shifts[n][d] = "休";
+    });
+  }
+
+  save();
+  render();
+};
+
+/* ===== 連勤チェック ===== */
+function warn(name,d){
+  let c=0;
+  for(let i=d-4;i<=d;i++){
+    if(shifts[name]?.[i] && shifts[name][i]!=="休") c++;
+  }
+  return c>=5;
+}
+
+/* ===== ドラッグ ===== */
+let drag=false;
+let dragVal="";
+
+window.startDrag=(v)=>{
+  drag=true;
+  dragVal=v;
+};
+
+window.stopDrag=()=>{
+  drag=false;
+};
+
+window.applyDrag=(name,d)=>{
+  if(!drag || !canEdit(name)) return;
+  shifts[name][d]=dragVal;
+  render();
+};
+
+/* ===== toggle ===== */
+window.toggle=(name,d)=>{
+  if(!canEdit(name)) return;
+
+  let cur = shifts[name][d]||"";
+  let next = {"":"日","日":"夜","夜":"休","休":""};
+
+  shifts[name][d]=next[cur];
+  save();
+  render();
+};
+
+/* ===== render ===== */
+function render(){
+  let html="<table><tr><th>名前</th>";
+
+  for(let d=0;d<30;d++) html+=`<th>${d+1}</th>`;
+  html+="</tr>";
+
+  staff.forEach(n=>{
+    html+=`<tr><td>${n}</td>`;
+
+    for(let d=0;d<30;d++){
+      let v = shifts[n]?.[d]||"";
+
+      let cls="";
+      if(v==="日") cls="day";
+      if(v==="夜") cls="night";
+      if(v==="休") cls="off";
+
+      if(warn(n,d)) cls+=" warning";
+      if(!canEdit(n)) cls+=" lock";
+
+      let wish = wishes[n]?.includes(d) ? "wish" : "";
+
+      html+=`
+        <td class="${cls} ${wish}"
+            onmousedown="startDrag('${v}')"
+            onmouseup="stopDrag()"
+            onmouseenter="applyDrag('${n}',${d})"
+            onclick="toggle('${n}',${d})">
+          ${v}
+        </td>`;
+    }
+
+    html+="</tr>";
+  });
+
+  html+="</table>";
+
+  document.getElementById("table").innerHTML=html;
+}
