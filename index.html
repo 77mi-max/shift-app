@@ -2,353 +2,277 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>シフト完成版 Pro</title>
+<title>ShiftCare</title>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<!-- ファビコン -->
+<link rel="icon" href="logo.png">
 
 <style>
-body { font-family:sans-serif; padding:20px; }
+body {
+  margin:0;
+  font-family:-apple-system, BlinkMacSystemFont;
+  background:#f5f5f5;
+}
 
-table { border-collapse: collapse; }
-td,th {
+/* ヘッダー */
+.top {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:12px 16px;
+  background:#fff;
+  box-shadow:0 2px 8px rgba(0,0,0,0.05);
+}
+
+.logo {
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+
+.logo img {
+  width:32px;
+}
+
+.logo h1 {
+  font-size:20px;
+  margin:0;
+}
+
+/* ボタン */
+button {
+  background:#007aff;
+  color:#fff;
+  border:none;
+  padding:8px 12px;
+  border-radius:8px;
+  cursor:pointer;
+}
+
+button.secondary {
+  background:#e0e0e0;
+  color:#333;
+}
+
+/* カード */
+.container {
+  max-width:1200px;
+  margin:auto;
+  padding:16px;
+}
+
+.card {
+  background:#fff;
+  border-radius:16px;
+  box-shadow:0 4px 16px rgba(0,0,0,0.08);
+  padding:16px;
+}
+
+/* テーブル */
+table {
+  width:100%;
+  border-collapse:collapse;
+}
+
+th, td {
   border:1px solid #ccc;
   padding:6px;
   text-align:center;
-  width:40px;
-  user-select:none;
+  font-size:12px;
 }
 
-.name { background:#f5f5f5; width:120px; }
-.weekend { background:#fff3cd; }
-.night { background:#cce5ff; }
-.holiday { background:#ffd6e7; }
-.after { color:#999; }
-.want { color:red; }
+/* 色ルール */
+.day { background:#fff; color:#000; }
+.night { background:#cce5ff; color:#000; }
+.off { background:#ffd6d6; color:#000; }
+.after { background:#fff; color:#000; }
 
-td.active { outline:2px solid #007aff; }
+.weekend { background:#fff3cd; }
+.weekend-day { background:#ffe08a; }
+
+.wish {
+  color:red !important;
+  font-weight:bold;
+}
+
+/* 印刷 */
+@media print {
+  button { display:none; }
+
+  @page {
+    size:A4 landscape;
+    margin:10mm;
+  }
+
+  table {
+    font-size:9px;
+  }
+
+  th, td {
+    border:1px solid #000;
+    padding:3px;
+  }
+}
 </style>
 </head>
 
 <body>
 
-<h2>シフト Pro</h2>
+<!-- ヘッダー -->
+<header class="top">
+  <div class="logo">
+    <img src="logo.png">
+    <h1>ShiftCare</h1>
+  </div>
 
-年 <select id="year"></select>
-月 <select id="month"></select>
-<button onclick="changeYM()">変更</button>
+  <div>
+    <button onclick="exportCSV()">CSV</button>
+    <button onclick="exportPDF()">PDF</button>
+  </div>
+</header>
 
-<br><br>
+<div class="container">
+  <div class="card">
 
-<input id="nameInput">
-<button onclick="addName()">追加</button>
-<button onclick="deleteName()">削除</button>
+    <h2 id="monthLabel"></h2>
 
-<br><br>
+    <table id="shiftTable"></table>
 
-<button onclick="toggleWant()">希望休</button>
-<button onclick="autoGenerate()">自動生成</button>
-<button onclick="exportPDF()">PDF出力</button>
+    <p style="font-size:12px; color:#888;">
+      医療・介護現場向けシフト管理ツール
+    </p>
 
-<br><br>
+    <p style="font-size:12px; color:#888;">
+      © 2026 ShiftCare
+    </p>
 
-<div id="needWrap"></div>
-<br>
-<div id="tableWrap"></div>
+  </div>
+</div>
 
 <script>
-let names=[], roles={}, shifts={}, wants={}, maxWork={};
-let needDay=[], needNight=[];
-let wantMode=false;
+let currentYear = 2026;
+let currentMonth = 1;
+let shifts = {
+  "田中": [],
+  "佐藤": []
+};
+let holidays = {};
 
-let isDragging=false;
-let dragValue=null;
+// 祝日取得
+async function loadHolidays(year){
+  let res = await fetch("https://holidays-jp.github.io/api/v1/date.json");
+  let data = await res.json();
 
-const yearEl=document.getElementById("year");
-const monthEl=document.getElementById("month");
-const nameInput=document.getElementById("nameInput");
-const needWrap=document.getElementById("needWrap");
-const tableWrap=document.getElementById("tableWrap");
-
-// ===== 年月 =====
-for(let y=2026;y<=2035;y++) yearEl.innerHTML+=`<option>${y}</option>`;
-for(let m=1;m<=12;m++) monthEl.innerHTML+=`<option>${m}</option>`;
-
-// ===== 日数 =====
-function getDays(){
-  return new Date(yearEl.value,monthEl.value,0).getDate();
+  holidays = Object.fromEntries(
+    Object.entries(data).filter(([k]) => k.startsWith(year + "-"))
+  );
 }
 
-// ===== 土日 =====
-function isWeekend(y,m,d){
-  let day=new Date(y,m-1,d).getDay();
-  return day===0 || day===6;
+// 判定
+function isHoliday(y,m,d){
+  let key = y + "-" + String(m).padStart(2,"0") + "-" + String(d).padStart(2,"0");
+  return holidays[key];
 }
 
-// ===== 保存キー（月別）=====
-function key(){
-  return `shift_${yearEl.value}_${monthEl.value}`;
-}
-
-// ===== 保存 =====
-function save(){
-  localStorage.setItem(key(),JSON.stringify({
-    names,roles,shifts,wants,maxWork,needDay,needNight
-  }));
-}
-
-// ===== 読込 =====
-function load(){
-  const d=JSON.parse(localStorage.getItem(key()));
-  if(!d) return;
-
-  names=d.names||[];
-  roles=d.roles||{};
-  shifts=d.shifts||{};
-  wants=d.wants||{};
-  maxWork=d.maxWork||{};
-  needDay=d.needDay||[];
-  needNight=d.needNight||[];
-}
-
-// ===== 初期化 =====
-function initArrays(){
-  const d=getDays();
-
-  names.forEach(n=>{
-    shifts[n]=shifts[n]?.slice(0,d)||Array(d).fill("休");
-    wants[n]=wants[n]?.slice(0,d)||Array(d).fill(false);
-
-    while(shifts[n].length<d) shifts[n].push("休");
-    while(wants[n].length<d) wants[n].push(false);
-  });
-
-  needDay=Array(d).fill(2);
-  needNight=Array(d).fill(1);
-}
-
-// ===== 連勤 =====
-function streak(n,d){
-  let c=0;
-  for(let i=d-1;i>=0;i--){
-    if(shifts[n][i] && !["休","/","有"].includes(shifts[n][i])) c++;
-    else break;
-  }
-  return c;
-}
-
-// ===== 公平スコア（低いほど優先）=====
-function score(n){
-  let day=shifts[n].filter(v=>v==="日").length;
-  let night=shifts[n].filter(v=>v==="夜").length;
-  return day*1 + night*1.2;
-}
-
-// ===== 自動生成（偏り制御）=====
-function autoGenerate(){
-  const d=getDays();
-
-  names.forEach(n=>{
-    shifts[n]=Array(d).fill("休");
-  });
-
-  for(let day=0;day<d;day++){
-
-    // 夜勤
-    let cnt=0;
-    let arr=[...names].sort((a,b)=>score(a)-score(b));
-
-    for(let n of arr){
-      if(cnt>=needNight[day]) break;
-      if(wants[n][day]) continue;
-      if(streak(n,day)>=maxWork[n]) continue;
-
-      shifts[n][day]="夜";
-      cnt++;
-
-      if(day+1<d && shifts[n][day+1]==="休"){
-        shifts[n][day+1]="/";
-      }
-    }
-
-    // 日勤
-    cnt=0;
-    arr=[...names].sort((a,b)=>score(a)-score(b));
-
-    for(let n of arr){
-      if(cnt>=needDay[day]) break;
-      if(wants[n][day]) continue;
-      if(streak(n,day)>=maxWork[n]) continue;
-
-      shifts[n][day]="日";
-      cnt++;
-    }
-  }
-
-  save();
-  render();
-}
-
-// ===== ドラッグ入力 =====
-function setCell(n,d,val){
-  if(shifts[n][d]==="/") return;
-
-  shifts[n][d]=val;
-
-  if(val==="夜" && d+1<getDays()){
-    if(shifts[n][d+1]==="休") shifts[n][d+1]="/";
-  }
-
-  save();
-  render();
-}
-
-// ===== セルクリック =====
-function clickCell(n,d){
-  if(wantMode){
-    wants[n][d]=!wants[n][d];
-    shifts[n][d]="休";
-  }else{
-    const list=["休","日","夜","有"];
-    let cur=shifts[n][d];
-    let next=list[(list.indexOf(cur)+1)%list.length];
-    setCell(n,d,next);
-    return;
-  }
-
-  save();
-  render();
-}
-
-// ===== ドラッグ =====
-document.addEventListener("mousedown",()=>isDragging=true);
-document.addEventListener("mouseup",()=>isDragging=false);
-
-// ===== 描画 =====
+// 描画
 function render(){
-  const d=getDays();
+  let days = new Date(currentYear, currentMonth, 0).getDate();
 
-  // 必要人数
-  let needHtml="<table><tr><th>必要</th>";
-  for(let i=0;i<d;i++){
-    needHtml+=`<td>
-      日<input type="number" value="${needDay[i]}"
-      onchange="needDay[${i}]=Number(this.value);save()">
-      <br>
-      夜<input type="number" value="${needNight[i]}"
-      onchange="needNight[${i}]=Number(this.value);save()">
-    </td>`;
+  document.getElementById("monthLabel").innerText =
+    currentYear + "年 " + currentMonth + "月";
+
+  let html = "<tr><th>名前</th>";
+  for(let d=1; d<=days; d++){
+    html += "<th>"+d+"</th>";
   }
-  needHtml+="</tr></table>";
-  needWrap.innerHTML=needHtml;
+  html += "</tr>";
 
-  // 表
-  let html="<table><tr><th class='name'>名前</th>";
+  for(let name in shifts){
+    html += "<tr><td>"+name+"</td>";
 
-  for(let i=0;i<d;i++) html+=`<th>${i+1}</th>`;
-  html+="</tr>";
+    for(let d=0; d<days; d++){
+      let v = shifts[name][d] || "";
 
-  names.forEach(n=>{
-    html+="<tr>";
+      let date = new Date(currentYear, currentMonth-1, d+1);
+      let day = date.getDay();
+      let isWeekend = (day===0 || day===6);
+      let holiday = isHoliday(currentYear, currentMonth, d+1);
 
-    html+=`<td class="name">
-      ${n}<br>
-      合計:${shifts[n].filter(v=>["日","夜"].includes(v)).length}<br>
-      <select onchange="roles['${n}']=this.value;save()">
-        <option ${roles[n]==="師長"?"selected":""}>師長</option>
-        <option ${roles[n]==="主任"?"selected":""}>主任</option>
-      </select><br>
-      連勤<input type="number"
-      value="${maxWork[n]}"
-      onchange="maxWork['${n}']=Number(this.value);save()">
-    </td>`;
+      let cls = "";
 
-    for(let i=0;i<d;i++){
-      let v=shifts[n][i];
-      let cls="";
+      if(v==="日") cls="day";
+      if(v==="夜") cls="night";
+      if(v==="休") cls="off";
+      if(v==="/") cls="after";
 
-      if(isWeekend(yearEl.value,monthEl.value,i+1)) cls+=" weekend";
-      if(v==="夜") cls+=" night";
-      if(v==="休") cls+=" holiday";
-      if(v==="/") cls+=" after";
-      if(wants[n][i]) cls+=" want";
+      if(isWeekend || holiday){
+        if(v==="日") cls="weekend-day";
+        else cls+=" weekend";
+      }
 
-      html+=`
-      <td class="${cls}"
-          onmousedown="dragValue='${v}'"
-          onmouseover="if(isDragging) setCell('${n}',${i},dragValue)"
-          onclick="clickCell('${n}',${i}')">
-        ${v}
-      </td>`;
+      html += `<td class="${cls}" onclick="edit('${name}',${d})">${v}</td>`;
     }
 
-    html+="</tr>";
-  });
+    html += "</tr>";
+  }
 
-  html+="</table>";
-  tableWrap.innerHTML=html;
+  document.getElementById("shiftTable").innerHTML = html;
 }
 
-// ===== PDF出力 =====
+// 編集
+function edit(name, day){
+  let v = prompt("日・夜・休・/");
+  shifts[name][day] = v;
+  saveShift();
+  render();
+}
+
+// 保存
+function saveShift(){
+  localStorage.setItem("shift", JSON.stringify(shifts));
+}
+
+// CSV
+function exportCSV(){
+  let days = new Date(currentYear, currentMonth, 0).getDate();
+
+  let csv = "ShiftCare シフト表\n\n名前,";
+  for(let d=1; d<=days; d++) csv += d + ",";
+  csv += "\n";
+
+  for(let name in shifts){
+    csv += name + ",";
+    for(let d=0; d<days; d++){
+      csv += (shifts[name][d] || "") + ",";
+    }
+    csv += "\n";
+  }
+
+  download(csv, "shift.csv");
+}
+
+function download(content, filename){
+  let blob = new Blob([content]);
+  let a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+// PDF
 function exportPDF(){
-  const { jsPDF }=window.jspdf;
-  const doc=new jsPDF();
-
-  doc.text(`シフト ${yearEl.value}/${monthEl.value}`,10,10);
-
-  let y=20;
-  names.forEach(n=>{
-    let line=n+": ";
-    line+=shifts[n].join(" ");
-    doc.text(line,10,y);
-    y+=7;
-  });
-
-  doc.save("shift.pdf");
+  alert("PDFとして保存してください");
+  window.print();
 }
 
-// ===== 追加削除 =====
-function addName(){
-  const n=nameInput.value;
-  if(!n) return;
+// 初期化
+(async()=>{
+  let saved = localStorage.getItem("shift");
+  if(saved) shifts = JSON.parse(saved);
 
-  names.push(n);
-  roles[n]="主任";
-  maxWork[n]=5;
-
-  initArrays();
-  save();
+  await loadHolidays(currentYear);
   render();
-}
-
-function deleteName(){
-  const n=nameInput.value;
-  names=names.filter(x=>x!==n);
-
-  delete shifts[n];
-  delete roles[n];
-  delete wants[n];
-  delete maxWork[n];
-
-  save();
-  render();
-}
-
-// ===== 月変更 =====
-function changeYM(){
-  load();
-  initArrays();
-  render();
-}
-
-// ===== モード =====
-function toggleWant(){
-  wantMode=!wantMode;
-}
-
-// ===== 起動 =====
-load();
-initArrays();
-render();
+})();
 </script>
 
 </body>
